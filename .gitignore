@@ -1,0 +1,5 @@
+dist/
+/main
+/csharg
+__debug_bin
+coverage.*

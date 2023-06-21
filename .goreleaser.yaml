@@ -1,0 +1,49 @@
+project_name: csharg
+dist: ./dist
+
+before:
+  hooks:
+    #- go mod tidy
+    - go generate .
+
+builds:
+  - id: default
+    main: ./cmd/csharg
+    binary: csharg
+    targets:
+      - linux_amd64_v1
+      - linux_arm64
+      - windows_amd64
+    tags:
+      - netgo
+      - osusergo
+    ldflags:
+      - 's -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}} -X main.builtBy=goreleaser'
+
+nfpms:
+  - id: default
+    package_name: csharg
+    file_name_template: '{{ .PackageName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}{{ with .Mips }}_{{ . }}{{ end }}{{ if not (eq .Amd64 "v1") }}{{ .Amd64 }}{{ end }}'
+    vendor: Siemens
+    homepage: https://github.com/siemens/csharg
+    maintainer: Harald Albrecht <harald.albrecht@siemens.com>
+    description: |-
+      csharg CLI installer package.
+      Capture network traffic in Docker virtual container networks.
+    license: MIT
+    formats:
+      - apk
+      - deb
+      - rpm
+    bindir: /usr/bin
+
+archives:
+  - id: default
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - README.md
+      - LICENSE
+    rlcp: true
