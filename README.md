@@ -6,6 +6,11 @@
 
 # csharg
 
+[![PkgGoDev](https://pkg.go.dev/badge/github.com/siemens/csharg)](https://pkg.go.dev/github.com/siemens/csharg)
+[![GitHub](https://img.shields.io/github/license/siemens/csharg)](https://img.shields.io/github/license/siemens/csharg)
+![build and test](https://github.com/siemens/csharg/workflows/build%20and%20test/badge.svg?branch=main)
+[![Go Report Card](https://goreportcard.com/badge/github.com/siemens/csharg)](https://goreportcard.com/report/github.com/siemens/csharg)
+
 `csharg` is a Golang module for easy CLI access to the
 [Packetflix](https://github.com/siemens/packetflix) capture service deployed to
 container hosts, such as [Edgeshark](https://github.com/siemens/edgeshark) on

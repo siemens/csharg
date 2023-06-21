@@ -18,7 +18,7 @@ type SetupCLI func(*cobra.Command)
 type CommandExamples func() map[string]string
 
 // BeforeCommand defines an exposed plugin symbol type for running checks after
-// the command line args have been processed and before running the (choosen)
+// the command line args have been processed and before running the (chosen)
 // command.
 type BeforeCommand func(*cobra.Command) error
 
