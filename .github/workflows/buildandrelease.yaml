@@ -1,4 +1,4 @@
-name: buildandrelease
+name: 'build and release'
 
 on:
   push:
@@ -15,8 +15,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@c85c95e3d7251135ab7dc9ce3241c5835cc595a9 # pin@v3
-        with:
-          fetch-depth: 0
+      - name: Get all git tags
+        run: |
+          git fetch --prune --unshallow --tags
       - name: Set up Go
         uses: actions/setup-go@fac708d6674e30b6ba41289acaab6d4b75aa0753 # pin@v4
       - name: Run GoReleaser
