@@ -7,13 +7,16 @@ package pcapng
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
+	"log/slog"
 	"regexp"
 	"strings"
 
-	"github.com/siemens/csharg/api"
-	log "github.com/sirupsen/logrus"
+	"github.com/thediveo/nonstd/xslog"
 	"gopkg.in/yaml.v3"
+
+	"github.com/siemens/csharg/api"
 )
 
 const (
@@ -81,7 +84,7 @@ func (pe *StreamEditor) Write(b []byte) (n int, err error) {
 	n = len(b)
 	b = pe.process(b)
 	if _, err = pe.sink.Write(b); err != nil {
-		log.Debugf("pcapng stream broken: %s", err.Error())
+		slog.Debug("pcapng stream broken", xslog.Error(err))
 		return
 	}
 	// During processing the SHB we might not (yet) have data to hand down to
@@ -124,11 +127,13 @@ func (pe *StreamEditor) processSHB() []byte {
 	major := pe.Endian.Uint16(pe.shb[12:14])
 	minor := pe.Endian.Uint16(pe.shb[14:16])
 	sectionLen := pe.Endian.Uint64(pe.shb[16:24])
-	log.Debugf("section header block: version %d.%d", major, minor)
+	slog.Debug("found section header block",
+		slog.String("version", fmt.Sprintf("%d.%d", major, minor)))
 	if sectionLen == ^uint64(0) {
-		log.Debug("signalled unknown section length")
+		slog.Debug("signalled unknown section length")
 	} else {
-		log.Debugf("signalled overall section length: %d", sectionLen)
+		slog.Debug("signalled overall section length",
+			slog.Uint64("length", sectionLen))
 	}
 	// ...then comes a list of options, terminated by an end-of-options
 	// option.
@@ -152,15 +157,17 @@ func (pe *StreamEditor) processSHB() []byte {
 			options = append(options, opt)
 		}
 		if opt.Code <= OptSHBUserAppl {
-			log.Debugf("option type %d: \"%s\"", opt.Code, opt.String())
+			slog.Debug("option",
+				slog.Int("type", int(opt.Code)),
+				slog.String("value", opt.String()))
 		} else {
-			log.Debugf("option type %d: ...", opt.Code)
+			slog.Debug("option", slog.Int("type", int(opt.Code)))
 		}
 	}
 	// Edit the first comment -- or be the first to create one :p
 	var comment string
 	if firstComment != nil {
-		log.Debug("removing existing SHB comment with container meta information, then updating")
+		slog.Debug("removing existing SHB comment with container meta information, then updating")
 		comment = firstComment.String()
 		if start := markerstart.FindStringIndex(comment); len(start) == 2 {
 			if comment[start[0]] == '\n' {
@@ -179,7 +186,7 @@ func (pe *StreamEditor) processSHB() []byte {
 			}
 		}
 	} else {
-		log.Debug("creating fresh SHB comment with container meta information")
+		slog.Debug("creating fresh SHB comment with container meta information")
 	}
 	// Append target info YAML to comment, so make sure there always is a proper
 	// line break before our YAML.
@@ -203,7 +210,8 @@ func (pe *StreamEditor) processSHB() []byte {
 	if err == nil {
 		comment += string(y)
 	} else {
-		log.Errorf("cannot create container YAML meta data: %s", err.Error())
+		slog.Error("cannot create container YAML meta data",
+			xslog.Error(err))
 	}
 	options = append(
 		[]*Option{
@@ -243,15 +251,15 @@ func (pe *StreamEditor) shbLenEndianness() bool {
 	// "byte-order magic" ... which tells us the endianness of values, such
 	// as the block length.
 	if !bytes.Equal(pe.shb[0:4], []byte{0x0a, 0x0d, 0x0d, 0x0a}) {
-		log.Error("invalid packet capture stream; must begin with section header block")
+		slog.Error("invalid packet capture stream; must begin with section header block")
 		return false
 	}
 	if bytes.Equal(pe.shb[8:12], []byte{0x1a, 0x2b, 0x3c, 0x4d}) {
 		pe.Endian = binary.BigEndian
-		log.Debug("section in packet capture stream is big endian")
+		slog.Debug("section in packet capture stream is big endian")
 	} else {
 		pe.Endian = binary.LittleEndian
-		log.Debug("section in packet capture stream is little endian")
+		slog.Debug("section in packet capture stream is little endian")
 	}
 	pe.shbLen = pe.Endian.Uint32(pe.shb[4:8])
 	return true

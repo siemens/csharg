@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -19,10 +20,11 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/thediveo/nonstd/xslog"
+
 	"github.com/siemens/csharg/api"
 	"github.com/siemens/csharg/pcapng"
 	"github.com/siemens/csharg/websock"
-	log "github.com/sirupsen/logrus"
 )
 
 // CaptureOptions describe a set of options giving more detailed control over
@@ -183,8 +185,14 @@ func CompleteTarget(t *api.Target, opts *CaptureOptions, ts *TargetCache) (*api.
 // the websocket and then in the background streams the incomming network packet
 // data into the given Writer.
 func StartCaptureStream(w io.Writer, ws *websocket.Conn, t *api.Target, opts *CaptureOptions) (cs CaptureStreamer, err error) {
-	log.Debugf("capturing from: %s %s", t.Type, t.Name)
-	log.Debugf("capturing from network interfaces: %s", strings.Join(t.NetworkInterfaces, ", "))
+	slog.Debug("starting capture",
+		slog.Group("target",
+			slog.String("type", t.Type),
+			slog.String("name", t.Name),
+		),
+		xslog.Lazy("interfaces", func() string {
+			return strings.Join(t.NetworkInterfaces, ",")
+		}))
 
 	csimpl := &captureStreamer{
 		// Wrap the websocket connection into something more "graceful" when it
@@ -206,7 +214,8 @@ func StartCaptureStream(w io.Writer, ws *websocket.Conn, t *api.Target, opts *Ca
 			// closed/broken.
 			data, err := csimpl.cws.Read()
 			if err != nil {
-				log.Debugf("websocket packet data stream error: %s", err.Error())
+				slog.Debug("websocket packet data stream failure",
+					xslog.Error(err))
 				return
 			}
 			// Now forward the packet data into the Wireshark pipe. But pass it
@@ -214,25 +223,25 @@ func StartCaptureStream(w io.Writer, ws *websocket.Conn, t *api.Target, opts *Ca
 			_, err = pcapedit.Write(data)
 			perr, ok := err.(*os.PathError)
 			if ok && (perr.Err == os.ErrClosed) {
-				log.Errorf("capture stream writer is fed up and does not accpet any more packets.")
+				slog.Error("capture stream writer is fed up and does not accpet any more packets")
 				go func() {
 					// We need to read further from the websocket in order to
 					// keep the control message interaction going during the
 					// graceful close. It's just that we're throwing away any
 					// packet capture data that might still arrive because it
 					// was already in flight.
-					log.Debug("draining websocket...")
+					slog.Debug("draining websocket...")
 					for {
 						_, err := csimpl.cws.Read()
 						if err != nil {
 							break
 						}
 					}
-					log.Debug("...drained")
+					slog.Debug("...drained")
 				}()
 				return
 			} else if err != nil {
-				log.Errorf("capture stream writer failed: %s", err.Error())
+				slog.Error("capture stream writer failure", xslog.Error(err))
 				return
 			}
 		}

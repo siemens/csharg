@@ -5,11 +5,11 @@
 package command
 
 import (
-	"github.com/siemens/csharg"
-	"github.com/siemens/csharg/cli"
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/thediveo/go-plugger/v3"
+
+	"github.com/siemens/csharg"
+	"github.com/siemens/csharg/cli"
 )
 
 // enable debug log output.

@@ -14,16 +14,17 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
 	"path"
 	"strings"
 
-	"github.com/siemens/csharg/api"
-
 	"github.com/gorilla/websocket"
-	log "github.com/sirupsen/logrus"
+	"github.com/thediveo/nonstd/xslog"
+
+	"github.com/siemens/csharg/api"
 )
 
 // SharkTankOnHostOptions allows some degree of control over how to use a
@@ -142,13 +143,13 @@ func (hc *hostsharktank) Capture(w io.Writer, t *api.Target, opts *CaptureOption
 			return
 		}
 	} else {
-		log.Debug("skipping unneeded target discovery")
+		slog.Debug("skipping unneeded target discovery")
 	}
 	// Prepare the necessary URL query parameters and request headers in order
 	// to suckcessfully start a capture...
 	wsheaders, err := CaptureServiceHeaders(t, opts)
 	if err != nil {
-		log.Errorf("service request header failure: %q", err.Error())
+		slog.Error("service request header failure", xslog.Error(err))
 		return
 	}
 	if hc.opts.BearerToken != "" {
@@ -156,7 +157,7 @@ func (hc *hostsharktank) Capture(w io.Writer, t *api.Target, opts *CaptureOption
 	}
 	query, err := CaptureServiceQueryParams(t, opts)
 	if err != nil {
-		log.Errorf("service request query parameter failure: %q", err.Error())
+		slog.Error("service request query parameter failure", xslog.Error(err))
 		return
 	}
 	apiurl := *hc.hosturl
@@ -169,7 +170,9 @@ func (hc *hostsharktank) Capture(w io.Writer, t *api.Target, opts *CaptureOption
 	apiurl.RawQuery = query.Encode()
 
 	// Finally: off to capture...
-	log.Debugf("connecting to capture service %q, time limit %s", apiurl.String(), hc.opts.Timeout)
+	slog.Debug("connecting to capture service",
+		slog.String("api", apiurl.String()),
+		slog.Any("timeout", hc.opts.Timeout))
 	wsd := &websocket.Dialer{
 		Proxy:            http.ProxyFromEnvironment,
 		HandshakeTimeout: hc.opts.Timeout,
@@ -179,10 +182,11 @@ func (hc *hostsharktank) Capture(w io.Writer, t *api.Target, opts *CaptureOption
 	}
 	wscon, resp, err := wsd.Dial(apiurl.String(), *wsheaders)
 	if err != nil {
-		log.Errorf("cannot contact capture service via websocket: %s", err.Error())
+		slog.Error("cannot contact capture service via websocket", xslog.Error(err))
 		return
 	}
-	log.Debugf("capture service initial HTTP response: %+v", *resp)
+	slog.Debug("capture service initial HTTP response",
+		xslog.Lazy("response", func() string { return fmt.Sprint(*resp) }))
 	return StartCaptureStream(w, wscon, t, opts)
 }
 
@@ -211,7 +215,9 @@ func (hc *hostsharktank) discover() (ts api.Targets) {
 	// that the result does make sense in that it can be decoded.
 	apiurl := *hc.hosturl
 	apiurl.Path = path.Join(apiurl.Path, "discover/mobyshark")
-	log.Debugf("querying targets from GhostWire-on-Packetflix service %q, time limit %s", apiurl.String(), hc.opts.Timeout)
+	slog.Debug("querying targets from GhostWire-on-Packetflix service",
+		slog.String("api", apiurl.String()),
+		slog.Any("timeout", hc.opts.Timeout))
 	httptrans := http.DefaultTransport.(*http.Transport)
 	if hc.opts.InsecureSkipVerify && apiurl.Scheme == "https" {
 		httptrans.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
@@ -222,7 +228,7 @@ func (hc *hostsharktank) discover() (ts api.Targets) {
 	}
 	req, err := http.NewRequest("GET", apiurl.String(), nil)
 	if err != nil {
-		log.Errorf("cannot create new HTTP request: %s", err.Error())
+		slog.Error("cannot create new HTTP request", xslog.Error(err))
 		return api.Targets{}
 	}
 	if hc.opts.BearerToken != "" {
@@ -230,14 +236,16 @@ func (hc *hostsharktank) discover() (ts api.Targets) {
 	}
 	res, err := httpclient.Do(req)
 	if err != nil {
-		log.Errorf("querying targets from GhostWire-on-Packetflix service failed: %s", err.Error())
+		slog.Error("querying targets from GhostWire-on-Packetflix service failed: %s",
+			xslog.Error(err))
 		return api.Targets{}
 	}
 	defer res.Body.Close()
 	var td api.GwTargetList
 	err = json.NewDecoder(res.Body).Decode(&td)
 	if err != nil {
-		log.Errorf("cannot decode targets from GhostWire-on-Packetflix service: %s", err.Error())
+		slog.Error("cannot decode targets from GhostWire-on-Packetflix service",
+			xslog.Error(err))
 		return api.Targets{}
 	}
 	// Since we don't have the cluster capture frontend service, we need to fill

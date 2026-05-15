@@ -7,10 +7,9 @@
 package pipe
 
 import (
+	"log/slog"
 	"os"
 	"syscall"
-
-	log "github.com/sirupsen/logrus"
 )
 
 // WaitTillBreak continuously checks a fifo/pipe to see when it breaks. When
@@ -18,7 +17,7 @@ import (
 //
 // This implementation leverages [syscall.Select].
 func WaitTillBreak(fifo *os.File) {
-	log.Debug("constantly monitoring packet capture fifo status...")
+	slog.Debug("constantly monitoring packet capture fifo status...")
 	fds := syscall.FdSet{}
 	for {
 		// Check the fifo becoming readable, which signals that it has been
@@ -34,7 +33,7 @@ func WaitTillBreak(fifo *os.File) {
 		if n != 0 || err != nil {
 			// Either the pipe was broken by Wireshark, or we did break it on
 			// purpose in the piping process. Anyway, we're done.
-			log.Debug("capture fifo broken, stopped monitoring.")
+			slog.Debug("capture fifo broken, stopped monitoring.")
 			return
 		}
 	}

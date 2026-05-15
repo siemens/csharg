@@ -7,6 +7,7 @@ package pcapng
 import (
 	"bytes"
 	"encoding/binary"
+	"log/slog"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -14,21 +15,28 @@ import (
 
 var _ = Describe("pcapng", func() {
 
+	BeforeEach(func() {
+		DeferCleanup(slog.SetDefault, slog.Default())
+		slog.SetDefault(slog.New(slog.NewTextHandler(GinkgoWriter, &slog.HandlerOptions{
+			Level: slog.LevelDebug,
+		})))
+	})
+
 	It("Encodes opts", func() {
 		bbig := (&Option{Code: uint16(42), Value: []byte("Go")}).
 			Bytes(binary.BigEndian)
-		Expect(len(bbig)).Should(Equal(2 + 2 + 4))
+		Expect(bbig).Should(HaveLen(2 + 2 + 4))
 		Expect(bbig).Should(Equal([]byte{0, 42, 0, 2, byte('G'), byte('o'), 0, 0}))
 
 		blittle := (&Option{Code: uint16(42), Value: []byte("Go")}).
 			Bytes(binary.LittleEndian)
-		Expect(len(blittle)).Should(Equal(2 + 2 + 4))
+		Expect(blittle).Should(HaveLen(2 + 2 + 4))
 		Expect(blittle).Should(Equal([]byte{42, 0, 2, 0, byte('G'), byte('o'), 0, 0}))
 	})
 
 	It("Encodes end-of-opts", func() {
 		b := (&Option{}).Bytes(binary.BigEndian)
-		Expect(len(b)).Should(Equal(4))
+		Expect(b).Should(HaveLen(4))
 		Expect(b).Should(Equal([]byte{0, 0, 0, 0}))
 	})
 
