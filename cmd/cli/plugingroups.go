@@ -6,21 +6,11 @@ package cli
 
 import (
 	"github.com/siemens/csharg"
-	"github.com/spf13/cobra"
 )
-
-// SetupCLI defines an exposed plugin symbol type for adding “things” to a
-// cobra root command (the csharg root command in particular).
-type SetupCLI func(*cobra.Command)
 
 // CommandExamples defines an exposed symbol with CLI examples, indexed by a
 // particular (sub) command, namely: “list” and “capture” at this time.
-type CommandExamples func() map[string]string
-
-// BeforeCommand defines an exposed plugin symbol type for running checks after
-// the command line args have been processed and before running the (chosen)
-// command.
-type BeforeCommand func(*cobra.Command) error
+type CommandExamples func() (command string, example string)
 
 // NewClient defines an exposed plugin symbol type for returning a suitable
 // capture client based on the CLI args. If a registered plugin factory isn't
