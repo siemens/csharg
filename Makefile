@@ -2,7 +2,7 @@ SHELL:=/bin/bash
 GOGEN:=go generate .
 BUILDTAGS:="osusergo,netgo"
 
-.PHONY: help clean dist pkgsite report run vuln
+.PHONY: help clean dist run
 
 help: ## list available targets
 	@# Derived from Gomega's Makefile (github.com/onsi/gomega) under MIT License
@@ -19,18 +19,5 @@ clean: ## cleans up build and testing artefacts
 	find . -name __debug_bin -delete
 	rm -f coverage.html coverage.out coverage.txt
 
-pkgsite: ## serves Go documentation on port 6060
-	@echo "navigate to: http://localhost:6060/github.com/siemens/csharg"
-	@scripts/pkgsite.sh
-
-report: ## runs goreportcard
-	@scripts/goreportcard.sh
-
-test: ## runs all tests
-	go test -v -p=1 -count=1 ./...
-
 run: ## runs csharg with optional ARGS=
 	go run -v -tags $(BUILDTAGS) ./cmd/csharg $(ARGS)
-
-vuln: ## run go vulnerabilities check
-	@scripts/vuln.sh
