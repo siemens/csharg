@@ -27,9 +27,9 @@ func init() {
 // as necessary.
 const mutualFlagGroupAnnotationKey = "mutually-exclusive-group"
 
-// MutuallyExclusiveInGroup marks the specified flag in the passed FlagSet as
+// ExclusiveInGroup marks the specified flag in the passed FlagSet as
 // mutually exclusive to other marked flags in the same specified group.
-func MutuallyExclusiveInGroup(fs *pflag.FlagSet, flagname string, group string) {
+func ExclusiveInGroup(fs *pflag.FlagSet, flagname string, group string) {
 	fs.SetAnnotation(flagname, mutualFlagGroupAnnotationKey, []string{group})
 }
 

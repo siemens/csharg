@@ -15,6 +15,7 @@ import (
 	"github.com/thediveo/go-plugger/v3"
 
 	"github.com/siemens/csharg/cli"
+	"github.com/siemens/csharg/cmd/cli/examples"
 )
 
 // Flag annotation for grouping mutually exclusive flags. Due to the open-ended
@@ -23,11 +24,6 @@ import (
 // their flags and we then gather the groups with their flag members in order to
 // issue MarkFlagsMutuallyExclusive as necessary.
 const MutualFlagGroupAnnotation = "mutually-exclusive-group"
-
-// ClientGroup is the name of an annotation value for flags that should be
-// mutually exclusive for specifying capture service client endpoint
-// information.
-const ClientGroup = "sharktank"
 
 // BearerToken specifies an optional user-supplied bearer token for
 // authentication to be used with either the service URL.
@@ -81,7 +77,7 @@ A value of zero means don't timeout requests.`)
 	// Fill in/expand command example sections, where additional command
 	// examples are available.
 	for _, cmd := range rootCmd.Commands() {
-		examples := cli.Examples(cmd.Name())
+		examples := examples.For(cmd.Name())
 		if examples == "" {
 			continue
 		}

@@ -4,17 +4,6 @@
 
 package cli
 
-import (
-	"github.com/siemens/csharg"
-)
-
-// NewClient defines an exposed plugin symbol type for returning a suitable
-// capture client based on the CLI args. If a registered plugin factory isn't
-// responsible, it must return a nil client as well as a nil error. If a factory
-// returns a non-nil error, the attempt to find a suitable factory will be
-// aborted and the returned error reported to the CLI user.
-type NewClient func() (csharg.SharkTank, error)
-
 // SemVer defines an exposed plugin symbol type for returning (overriding) the
 // CLI binary's semantic version. The first plugin will win.
 type SemVer func() string

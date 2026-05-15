@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-package examples
+package client
 
 import (
 	"testing"
@@ -11,7 +11,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func TestCmdCliExamples(t *testing.T) {
+func TestCmdCliClient(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Csharg cmd/cli/examples package suite")
+	RunSpecs(t, "Csharg cmd/cli/client package suite")
 }
