@@ -11,11 +11,10 @@ package command
 import (
 	"time"
 
-	"github.com/siemens/csharg/cli"
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 	"github.com/thediveo/go-plugger/v3"
-	"golang.org/x/exp/slices"
+
+	"github.com/siemens/csharg/cli"
 )
 
 // Flag annotation for grouping mutually exclusive flags. Due to the open-ended
@@ -90,40 +89,4 @@ A value of zero means don't timeout requests.`)
 	}
 
 	return rootCmd
-}
-
-// Annotate annotates the flag identified by name with the key=ann.
-func Annotate(fs *pflag.FlagSet, flagname, key, ann string) {
-	fs.SetAnnotation(flagname, key, []string{ann})
-}
-
-// exclusivesMap maps an "exclusive" group (name) to its mutually exclusive
-// flags (names).
-type exclusivesMap map[string][]string
-
-// mutuallyExclusives starts with the specified command and collects mutually
-// exclusive flags as identified by their annotations. It then configures them
-// into their groups. This process then recursively repeats with each child
-// command.
-func mutuallyExclusives(cmd *cobra.Command) {
-	exclusives := exclusivesMap{}
-	cmd.MarkFlagsMutuallyExclusive() // hack: trigger merging if not already happened
-	cmd.Flags().VisitAll(func(flag *pflag.Flag) {
-		group := flag.Annotations[MutualFlagGroupAnnotation]
-		if len(group) != 1 {
-			return
-		}
-		name := flag.Name
-		members := exclusives[group[0]]
-		if slices.Contains(members, name) {
-			return
-		}
-		exclusives[group[0]] = append(exclusives[group[0]], name)
-	})
-	for _, members := range exclusives {
-		cmd.MarkFlagsMutuallyExclusive(members...)
-	}
-	for _, subcmd := range cmd.Commands() {
-		mutuallyExclusives(subcmd)
-	}
 }

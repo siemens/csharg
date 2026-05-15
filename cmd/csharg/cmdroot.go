@@ -27,7 +27,6 @@ others), and also container-less network stacks.`,
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 			return clippy.BeforeCommand(cmd)
 		},
-		RunE: lspidnscmd,
 	}
 	clippy.AddFlags(rootCmd)
 	return

@@ -5,11 +5,14 @@
 package sharktank
 
 import (
+	"github.com/spf13/cobra"
+	"github.com/thediveo/clippy/cliplugin"
+	"github.com/thediveo/go-plugger/v3"
+
 	"github.com/siemens/csharg"
 	"github.com/siemens/csharg/cli"
 	"github.com/siemens/csharg/cli/command"
-	"github.com/spf13/cobra"
-	"github.com/thediveo/go-plugger/v3"
+	"github.com/siemens/csharg/cmd/cli/examples"
 )
 
 // StandaloneHost specifies the hostname and port number of a discovery+capture
@@ -20,11 +23,11 @@ var StandaloneHost string
 var Insecure bool
 
 func init() {
-	plugger.Group[cli.SetupCLI]().Register(
+	plugger.Group[cliplugin.SetupCLI]().Register(
 		HostSetupCLI, plugger.WithPlugin("host"))
 	plugger.Group[cli.NewClient]().Register(
 		NewHostClient, plugger.WithPlugin("host"))
-	plugger.Group[cli.CommandExamples]().Register(
+	plugger.Group[examples.CommandExamples]().Register(
 		func() map[string]string {
 			return map[string]string{
 				"list": `# List only (stand-alone) containers on the local host.

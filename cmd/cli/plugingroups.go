@@ -8,10 +8,6 @@ import (
 	"github.com/siemens/csharg"
 )
 
-// CommandExamples defines an exposed symbol with CLI examples, indexed by a
-// particular (sub) command, namely: “list” and “capture” at this time.
-type CommandExamples func() (command string, example string)
-
 // NewClient defines an exposed plugin symbol type for returning a suitable
 // capture client based on the CLI args. If a registered plugin factory isn't
 // responsible, it must return a nil client as well as a nil error. If a factory
