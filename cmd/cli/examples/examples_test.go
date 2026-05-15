@@ -14,36 +14,36 @@ import (
 var _ = Describe("command examples", func() {
 
 	BeforeEach(func() {
-		grp := plugger.Group[CommandExamples]()
+		grp := plugger.Group[Illustrate]()
 		DeferCleanup(grp.Restore, grp.Backup())
 		grp.Clear()
 	})
 
 	It("ignores empty examples", func() {
-		plugger.Group[CommandExamples]().Register(func() Examples {
-			return Examples{
+		plugger.Group[Illustrate]().Register(func() ForCommands {
+			return ForCommands{
 				"foo": "\n",
 				"bar": "gnampf",
 			}
 		}, plugger.WithPlugin("foo"))
-		Expect(ExamplesFor("foo")).To(BeEmpty())
+		Expect(For("foo")).To(BeEmpty())
 	})
 
 	It("ignores other examples", func() {
-		plugger.Group[CommandExamples]().Register(func() Examples {
-			return Examples{"foo": "\n"}
+		plugger.Group[Illustrate]().Register(func() ForCommands {
+			return ForCommands{"foo": "\n"}
 		}, plugger.WithPlugin("foo"))
-		Expect(ExamplesFor("bar")).To(BeEmpty())
+		Expect(For("bar")).To(BeEmpty())
 	})
 
 	It("augments examples", func() {
-		plugger.Group[CommandExamples]().Register(func() Examples {
-			return Examples{"foo": "example-1"}
+		plugger.Group[Illustrate]().Register(func() ForCommands {
+			return ForCommands{"foo": "example-1"}
 		}, plugger.WithPlugin("foo1"))
-		plugger.Group[CommandExamples]().Register(func() Examples {
-			return Examples{"foo": "example-2"}
+		plugger.Group[Illustrate]().Register(func() ForCommands {
+			return ForCommands{"foo": "example-2"}
 		}, plugger.WithPlugin("foo2"))
-		Expect(ExamplesFor("foo")).To(Equal("example-1\n\nexample-2"))
+		Expect(For("foo")).To(Equal("example-1\n\nexample-2"))
 	})
 
 })

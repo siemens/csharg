@@ -27,9 +27,9 @@ func init() {
 		HostSetupCLI, plugger.WithPlugin("host"))
 	plugger.Group[cli.NewClient]().Register(
 		NewHostClient, plugger.WithPlugin("host"))
-	plugger.Group[examples.CommandExamples]().Register(
-		func() map[string]string {
-			return map[string]string{
+	plugger.Group[examples.Illustrate]().Register(
+		func() examples.ForCommands {
+			return examples.ForCommands{
 				"list": `# List only (stand-alone) containers on the local host.
 csharg --host localhost:5001 list containers
 
