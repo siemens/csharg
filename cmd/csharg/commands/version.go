@@ -2,16 +2,19 @@
 //
 // SPDX-License-Identifier: MIT
 
-package command
+package commands
 
 import (
 	"fmt"
 	"strings"
 
-	"github.com/siemens/csharg"
-	"github.com/siemens/csharg/cli"
 	"github.com/spf13/cobra"
+	"github.com/thediveo/clippy/cliplugin"
 	"github.com/thediveo/go-plugger/v3"
+
+	"github.com/siemens/csharg"
+	"github.com/siemens/csharg/cmd/cli"
+	"github.com/siemens/csharg/cmd/cli/client"
 )
 
 // Provides the “csharg version” command. The semantic version is the one
@@ -20,7 +23,7 @@ import (
 // included client types.
 var versionCmd = &cobra.Command{
 	Use:   "version",
-	Short: "Show version (with integrated capture service clients).",
+	Short: "Show version (including integrated capture service clients).",
 	Run: func(cmd *cobra.Command, args []string) {
 		semver := csharg.SemVersion
 		for _, pluginsemver := range plugger.Group[cli.SemVer]().Symbols() {
@@ -30,16 +33,16 @@ var versionCmd = &cobra.Command{
 		fmt.Printf("%s version %s (capture service clients: %s)\n",
 			cmd.Parent().Name(),
 			semver,
-			strings.Join(plugger.Group[cli.NewClient]().Plugins(), ", "))
+			strings.Join(plugger.Group[client.New]().Plugins(), ", "))
 	},
 }
 
 func init() {
-	plugger.Group[cli.SetupCLI]().Register(
-		VersionSetupCLI, plugger.WithPlugin("version"))
+	plugger.Group[cliplugin.SetupCLI]().Register(
+		versionSetupCLI, plugger.WithPlugin("version"))
 }
 
-// VersionSetupCLI adds the “version” command.
-func VersionSetupCLI(cmd *cobra.Command) {
+// versionSetupCLI adds the “version” command.
+func versionSetupCLI(cmd *cobra.Command) {
 	cmd.AddCommand(versionCmd)
 }

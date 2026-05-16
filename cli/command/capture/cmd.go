@@ -14,7 +14,7 @@ import (
 	"github.com/siemens/csharg"
 	"github.com/siemens/csharg/api"
 	"github.com/siemens/csharg/cli"
-	"github.com/siemens/csharg/cli/command"
+	"github.com/siemens/csharg/cmd/csharg/commands"
 	"github.com/thediveo/go-plugger/v3"
 
 	log "github.com/sirupsen/logrus"
@@ -60,7 +60,7 @@ func CaptureSetupCLI(cmd *cobra.Command) {
 func capture(cmd *cobra.Command, targetname string, targettypes []string, nodename string) error {
 	// Retrieve the list of capture targets from the container/cluster capture
 	// service.
-	st, err := command.NewSharkTank()
+	st, err := commands.NewSharkTank()
 	if err != nil {
 		return fmt.Errorf("invalid --context: %s", err)
 	}

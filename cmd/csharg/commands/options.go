@@ -2,11 +2,11 @@
 //
 // SPDX-License-Identifier: MIT
 
-package command
+package commands
 
 import (
-	"github.com/siemens/csharg/cli"
 	"github.com/spf13/cobra"
+	"github.com/thediveo/clippy/cliplugin"
 	"github.com/thediveo/go-plugger/v3"
 )
 
@@ -28,11 +28,12 @@ var optionsUsageTemplate = `{{.InheritedFlags.FlagUsages | trimTrailingWhitespac
 `
 
 func init() {
-	plugger.Group[cli.SetupCLI]().Register(OptionsSetupCLI, plugger.WithPlugin("options"))
+	plugger.Group[cliplugin.SetupCLI]().Register(
+		optionsSetupCLI, plugger.WithPlugin("options"))
 }
 
-// OptionsSetupCLI adds the "option" command.
-func OptionsSetupCLI(cmd *cobra.Command) {
+// optionsSetupCLI adds the "option" command.
+func optionsSetupCLI(cmd *cobra.Command) {
 	cmd.AddCommand(optionsCmd)
 	optionsCmd.SetUsageTemplate(optionsUsageTemplate)
 }

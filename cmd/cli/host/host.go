@@ -10,10 +10,10 @@ import (
 	"github.com/thediveo/go-plugger/v3"
 
 	"github.com/siemens/csharg"
-	"github.com/siemens/csharg/cli/command"
 	"github.com/siemens/csharg/cmd/cli/client"
 	"github.com/siemens/csharg/cmd/cli/examples"
 	"github.com/siemens/csharg/cmd/cli/mutual"
+	"github.com/siemens/csharg/cmd/csharg/commands"
 )
 
 const (
@@ -68,8 +68,8 @@ func newClient(cmd *cobra.Command) (csharg.SharkTank, error) {
 	insecure, _ := pf.GetBool(InsecureFlag)
 	opts := &csharg.SharkTankOnHostOptions{
 		CommonClientOptions: csharg.CommonClientOptions{
-			BearerToken: command.BearerToken,
-			Timeout:     command.ReqTimeout,
+			BearerToken: commands.BearerToken,
+			Timeout:     commands.ReqTimeout,
 		},
 		InsecureSkipVerify: insecure,
 	}

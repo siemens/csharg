@@ -11,8 +11,8 @@ import (
 
 	"github.com/siemens/csharg"
 	"github.com/siemens/csharg/cli"
-	"github.com/siemens/csharg/cli/command"
 	"github.com/siemens/csharg/cmd/cli/examples"
+	"github.com/siemens/csharg/cmd/csharg/commands"
 )
 
 // StandaloneHost specifies the hostname and port number of a discovery+capture
@@ -50,7 +50,7 @@ func HostSetupCLI(cmd *cobra.Command) {
 	pf.StringVar(&StandaloneHost, "host", "",
 		`[http://|https://]hostname[:port][/path] of a Packetflix capture service
 on a standalone container host`)
-	command.Annotate(pf, "host", command.MutualFlagGroupAnnotation, command.ClientGroup)
+	commands.Annotate(pf, "host", commands.MutualFlagGroupAnnotation, commands.ClientGroup)
 	pf.BoolVarP(&Insecure, "insecure", "k", false,
 		"Danger: skip invalid server certificates when connecting to a standalone container host")
 }
@@ -60,8 +60,8 @@ func NewHostClient() (csharg.SharkTank, error) {
 	if StandaloneHost != "" {
 		opts := &csharg.SharkTankOnHostOptions{
 			CommonClientOptions: csharg.CommonClientOptions{
-				BearerToken: command.BearerToken,
-				Timeout:     command.ReqTimeout,
+				BearerToken: commands.BearerToken,
+				Timeout:     commands.ReqTimeout,
 			},
 			InsecureSkipVerify: Insecure,
 		}

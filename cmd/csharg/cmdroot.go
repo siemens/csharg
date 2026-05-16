@@ -11,8 +11,11 @@ package main
 import (
 	"github.com/spf13/cobra"
 	"github.com/thediveo/clippy"
+	_ "github.com/thediveo/clippy/debug"
+	_ "github.com/thediveo/lxkns/cmd/cli/silent"
 )
 
+// rootCmd represents the Cobra "root" command thus the charg CLI itself.
 func newRootCmd() (rootCmd *cobra.Command) {
 	rootCmd = &cobra.Command{
 		Use:   "csharg",

@@ -6,7 +6,7 @@
 // Additionally runs some checks on some of those global CLI flags, where
 // necessary, so individual commands do not need to check them themselves.
 
-package command
+package commands
 
 import (
 	"time"
@@ -32,28 +32,6 @@ var BearerToken string
 // ReqTimeout specifies the length of time to wait before giving up on a single
 // server request.
 var ReqTimeout time.Duration
-
-// rootCmd represents the Cobra "root" command thus the charg CLI itself.
-var rootCmd = &cobra.Command{
-	Use:   "csharg",
-	Short: "Capture network traffic in Kubernetes clusters",
-	Long: `csharg is a CLI tool for capturing live network traffic from various
-capture targets, such as Kubernetes pods, standalone containers (Docker, but also
-others), and also container-less network stacks.`,
-	// See: https://github.com/spf13/cobra/issues/340
-	SilenceUsage:  true,
-	SilenceErrors: false,
-	// Check mutually exclusive CLI args, ...
-	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		// Run the registered before-the-command plugins
-		for _, beforeCmd := range plugger.Group[cli.BeforeCommand]().Symbols() {
-			if err := beforeCmd(cmd); err != nil {
-				return err
-			}
-		}
-		return nil
-	},
-}
 
 // SetupCLI registers the global ("persistent") CLI flags, as well as the
 // (sub)commands. The individual commands are registered via a plugin-mechanism.

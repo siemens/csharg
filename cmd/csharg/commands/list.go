@@ -5,19 +5,21 @@
 // Provides the "csharg list" command for listing available capture network
 // traffic from targets served by a Packetflix service.
 
-package command
+package commands
 
 import (
 	"fmt"
 	"os"
 	"strings"
 
-	"github.com/siemens/csharg/api"
-	"github.com/siemens/csharg/cli"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"github.com/thediveo/clippy/cliplugin"
 	"github.com/thediveo/go-plugger/v3"
 	"github.com/thediveo/klo"
+
+	"github.com/siemens/csharg/api"
+	"github.com/siemens/csharg/cmd/cli/client"
 )
 
 // Builtin custom-columns templates
@@ -74,11 +76,12 @@ var listCmd = &cobra.Command{
 }
 
 func init() {
-	plugger.Group[cli.SetupCLI]().Register(ListSetupCLI, plugger.WithPlugin("list"))
+	plugger.Group[cliplugin.SetupCLI]().Register(
+		listSetupCLI, plugger.WithPlugin("list"))
 }
 
-// ListSetupCLI adds the “list” command.
-func ListSetupCLI(cmd *cobra.Command) {
+// listSetupCLI adds the “list” command.
+func listSetupCLI(cmd *cobra.Command) {
 	cmd.AddCommand(listCmd)
 	listCmd.Flags().StringP("output", "o", "",
 		"Output format. One of: json|yaml|wide|custom-columns=...|custom-columns-file=...|jsonpath=...|jsonpath-file=...")
@@ -143,7 +146,7 @@ func filteredlist(cmd *cobra.Command, args []string) error {
 	}
 	// Retrieve the list of capture targets from the container/cluster capture
 	// service.
-	st, err := NewSharkTank()
+	st, err := client.NewSharkTank(cmd)
 	if err != nil {
 		return fmt.Errorf("invalid --context: %s", err)
 	}
@@ -192,22 +195,22 @@ func getPrinter(cmd *cobra.Command) (prn klo.ValuePrinter, err error) {
 			panic(err)
 		}
 		prn.(*klo.CustomColumnsPrinter).HideHeaders = true
-	} else {
-		// For the other output format option, let the kubectl-like output
-		// package handle the details and give us just the printer suitable for
-		// dumping the target list onto our users.
-		prn, err = klo.PrinterFromFlag(outfmt, &klo.Specs{
-			DefaultColumnSpec: TargetListTemplate,
-			WideColumnSpec:    TargetWideListTemplate,
-		})
-		if err != nil {
-			return
-		}
-		if ccprn, ok := prn.(*klo.CustomColumnsPrinter); ok {
-			ccprn.Padding = 3
-			if noheaders, err := cmd.LocalFlags().GetBool("no-headers"); err == nil {
-				ccprn.HideHeaders = noheaders
-			}
+		return
+	}
+	// For the other output format option, let the kubectl-like output
+	// package handle the details and give us just the printer suitable for
+	// dumping the target list onto our users.
+	prn, err = klo.PrinterFromFlag(outfmt, &klo.Specs{
+		DefaultColumnSpec: TargetListTemplate,
+		WideColumnSpec:    TargetWideListTemplate,
+	})
+	if err != nil {
+		return
+	}
+	if ccprn, ok := prn.(*klo.CustomColumnsPrinter); ok {
+		ccprn.Padding = 3
+		if noheaders, err := cmd.LocalFlags().GetBool("no-headers"); err == nil {
+			ccprn.HideHeaders = noheaders
 		}
 	}
 	return
