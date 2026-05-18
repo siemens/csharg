@@ -25,6 +25,7 @@ require (
 
 require (
 	github.com/lmittmann/tint v1.1.2 // indirect
+	github.com/thediveo/safe v0.9.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	golang.org/x/exp v0.0.0-20260508232706-74f9aab9d74a // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect

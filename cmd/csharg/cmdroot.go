@@ -9,6 +9,8 @@
 package main
 
 import (
+	"strings"
+
 	"github.com/spf13/cobra"
 	"github.com/thediveo/clippy"
 	_ "github.com/thediveo/clippy/debug"
@@ -32,9 +34,30 @@ others), and also container-less network stacks.`,
 		SilenceErrors: false,
 		// Check mutually exclusive CLI args, ...
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+			// Nota bene: some commands like the "help" can be in some weird
+			// detached state where they don't have the persistent flags
+			// inherited, so we need to "fix in post" (even if this is in "pre",
+			// but hey!). To add insult to injury, flag sets have no way to
+			// determine if they're empty or not, as PersistentFlags() always
+			// returns a flag set (yay!), creating a fresh empty one on-the-fly
+			// when necessary.
+			if cmd.Use == "help" || strings.HasPrefix(cmd.Use, "help ") {
+				cmd.PersistentFlags().AddFlagSet(rootCmd.PersistentFlags())
+			}
 			return clippy.BeforeCommand(cmd)
 		},
 	}
 	clippy.AddFlags(rootCmd) // ...runs all registered SetupCLI plugins.
+	helpCmd, _, _ := rootCmd.Find([]string{"help"})
+	helpCmd.PersistentFlags().AddFlagSet(rootCmd.PersistentFlags())
+
+	defaultHelpFn := rootCmd.HelpFunc()
+	rootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+		if err := clippy.BeforeCommand(rootCmd); err != nil {
+			return
+		}
+		defaultHelpFn(cmd, args)
+	})
+
 	return
 }

@@ -47,7 +47,7 @@ const (
 var listCmd = &cobra.Command{
 	Use:     "list [flags] [pods|containers|networks...]",
 	Aliases: []string{"ps"},
-	Short:   "List network capture targets in a Kubernetes cluster",
+	Short:   "List network capture targets in a Docker host or Kubernetes cluster",
 	// Accept only valid args, and then build the "filter" annotation from the
 	// validated args: it will contain just each of the initials "p", "c", and
 	// "n" at most once. Yes, we're extremely lazy here ... knowing that the
