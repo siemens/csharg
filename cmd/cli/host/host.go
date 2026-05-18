@@ -13,7 +13,8 @@ import (
 	"github.com/siemens/csharg/cmd/cli/client"
 	"github.com/siemens/csharg/cmd/cli/examples"
 	"github.com/siemens/csharg/cmd/cli/mutual"
-	"github.com/siemens/csharg/cmd/csharg/commands"
+	"github.com/siemens/csharg/cmd/cli/req"
+	"github.com/siemens/csharg/cmd/cli/token"
 )
 
 const (
@@ -68,8 +69,8 @@ func newClient(cmd *cobra.Command) (csharg.SharkTank, error) {
 	insecure, _ := pf.GetBool(InsecureFlag)
 	opts := &csharg.SharkTankOnHostOptions{
 		CommonClientOptions: csharg.CommonClientOptions{
-			BearerToken: commands.BearerToken,
-			Timeout:     commands.ReqTimeout,
+			BearerToken: token.Get(cmd),
+			Timeout:     req.GetTimeout(cmd),
 		},
 		InsecureSkipVerify: insecure,
 	}

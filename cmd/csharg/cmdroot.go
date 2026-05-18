@@ -13,6 +13,9 @@ import (
 	"github.com/thediveo/clippy"
 	_ "github.com/thediveo/clippy/debug"
 	_ "github.com/thediveo/lxkns/cmd/cli/silent"
+
+	_ "github.com/siemens/csharg/cmd/cli/client"
+	_ "github.com/siemens/csharg/cmd/cli/host"
 )
 
 // rootCmd represents the Cobra "root" command thus the charg CLI itself.
@@ -31,6 +34,6 @@ others), and also container-less network stacks.`,
 			return clippy.BeforeCommand(cmd)
 		},
 	}
-	clippy.AddFlags(rootCmd)
+	clippy.AddFlags(rootCmd) // ...runs all registered SetupCLI plugins.
 	return
 }

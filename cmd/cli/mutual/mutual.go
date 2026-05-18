@@ -15,7 +15,7 @@ import (
 
 func init() {
 	plugger.Group[cliplugin.SetupCLI]().Register(setupCLI,
-		plugger.WithPlacement(">"),
+		plugger.WithPlacement(">"), // run last
 		plugger.WithPlugin("mutually-exclusive"))
 }
 

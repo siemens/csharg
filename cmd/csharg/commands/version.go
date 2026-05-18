@@ -5,7 +5,7 @@
 package commands
 
 import (
-	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -13,8 +13,8 @@ import (
 	"github.com/thediveo/go-plugger/v3"
 
 	"github.com/siemens/csharg"
-	"github.com/siemens/csharg/cmd/cli"
 	"github.com/siemens/csharg/cmd/cli/client"
+	"github.com/siemens/csharg/cmd/cli/sem"
 )
 
 // Provides the “csharg version” command. The semantic version is the one
@@ -25,15 +25,10 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Show version (including integrated capture service clients).",
 	Run: func(cmd *cobra.Command, args []string) {
-		semver := csharg.SemVersion
-		for _, pluginsemver := range plugger.Group[cli.SemVer]().Symbols() {
-			semver = pluginsemver()
-			break
-		}
-		fmt.Printf("%s version %s (capture service clients: %s)\n",
-			cmd.Parent().Name(),
-			semver,
-			strings.Join(plugger.Group[client.New]().Plugins(), ", "))
+		semver := sem.Version(csharg.SemVersion)
+		slog.Info(cmd.Parent().Name(),
+			slog.String("semver", semver),
+			slog.String("capture-service-clients", strings.Join(plugger.Group[client.New]().Plugins(), ",")))
 	},
 }
 
