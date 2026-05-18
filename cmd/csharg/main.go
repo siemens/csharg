@@ -10,9 +10,6 @@ package main
 
 import (
 	"os"
-
-	_ "github.com/siemens/csharg/cli/command/capture"
-	_ "github.com/siemens/csharg/cli/sharktank" // stand-alone host
 )
 
 func main() {

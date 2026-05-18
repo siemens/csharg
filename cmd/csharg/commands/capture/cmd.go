@@ -11,14 +11,14 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/siemens/csharg"
-	"github.com/siemens/csharg/api"
-	"github.com/siemens/csharg/cli"
-	"github.com/siemens/csharg/cmd/csharg/commands"
-	"github.com/thediveo/go-plugger/v3"
-
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"github.com/thediveo/clippy/cliplugin"
+	"github.com/thediveo/go-plugger/v3"
+
+	"github.com/siemens/csharg"
+	"github.com/siemens/csharg/api"
+	"github.com/siemens/csharg/cmd/cli/client"
 )
 
 const AvoidPromModeArg = "avoid-promiscuous"
@@ -36,7 +36,7 @@ var captureCmd = &cobra.Command{
 }
 
 func init() {
-	plugger.Group[cli.SetupCLI]().Register(CaptureSetupCLI, plugger.WithPlugin("capture"))
+	plugger.Group[cliplugin.SetupCLI]().Register(CaptureSetupCLI, plugger.WithPlugin("capture"))
 }
 
 // CaptureSetupCLI adds the "capture" command.
@@ -60,7 +60,7 @@ func CaptureSetupCLI(cmd *cobra.Command) {
 func capture(cmd *cobra.Command, targetname string, targettypes []string, nodename string) error {
 	// Retrieve the list of capture targets from the container/cluster capture
 	// service.
-	st, err := commands.NewSharkTank()
+	st, err := client.NewSharkTank(cmd)
 	if err != nil {
 		return fmt.Errorf("invalid --context: %s", err)
 	}

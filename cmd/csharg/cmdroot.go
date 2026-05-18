@@ -16,6 +16,7 @@ import (
 
 	_ "github.com/siemens/csharg/cmd/cli/client"
 	_ "github.com/siemens/csharg/cmd/cli/host"
+	_ "github.com/siemens/csharg/cmd/csharg/commands"
 )
 
 // rootCmd represents the Cobra "root" command thus the charg CLI itself.
