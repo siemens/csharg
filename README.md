@@ -11,13 +11,13 @@
 [![GitHub](https://img.shields.io/github/license/siemens/csharg)](https://img.shields.io/github/license/siemens/csharg)
 ![build and test](https://github.com/siemens/csharg/workflows/build%20and%20test/badge.svg?branch=main)
 
-`csharg` is a Golang module for easy CLI access to the
+`csharg/v2` is a Golang module for easy CLI access to the
 [Packetflix](https://github.com/siemens/packetflix) capture service deployed to
 container hosts, such as [Edgeshark](https://github.com/siemens/edgeshark) on
 [Siemens Industrial Edge](https://github.com/industrial-edge) and also
 standalone Docker hosts.
 
-`csharg` is part of the "Edgeshark" project that consist of several
+`csharg/v2` is part of the "Edgeshark" project that consist of several
 repositories:
 - [Edgeshark Hub repository](https://github.com/siemens/edgeshark)
 - [G(h)ostwire discovery service](https://github.com/siemens/ghostwire)
@@ -31,7 +31,7 @@ repositories:
 
 ## Usage
 
-`csharg` can be used in different ways:
+`csharg/v2` can be used in different ways:
 
 - as the standalone CLI program `csharg`, such as in:
 
@@ -264,6 +264,27 @@ func main() {
 - `make`: lists all targets.
 - `make clean`: removes the build artefacts.
 - `make dist`: builds snapshot packages and archives of the csharg CLI binary.
+- `make e2e`: runs the opt-in end-to-end tests.
+
+## End-to-End Tests
+
+The end-to-end tests in `e2e/` run csharg against a real Packetflix capture
+service and thus are opt-in: plain `go test ./...` skips them. Run them by
+selecting the `e2e` Ginkgo label, or simply using `make e2e`:
+
+```bash
+go test -v -race -p 1 ./e2e/... -ginkgo.label-filter=e2e
+```
+
+Further labels narrow the selection, for instance `-ginkgo.label-filter='e2e &&
+!k8s'`. Label filters that don't explicitly select `e2e`, such as `'!k8s'`,
+still skip the end-to-end tests.
+
+The end-to-end tests require a local Docker engine that allows containers
+sharing the host's PID namespace with additional capabilities, as well as
+`tshark` and `capinfos` (already baked into the devcontainer). They deploy the `ghcr.io/siemens/ghostwire` and
+`ghcr.io/siemens/packetflix` services together with `busybox` capture targets,
+and then automatically clean up afterwards.
 
 # Contributing
 

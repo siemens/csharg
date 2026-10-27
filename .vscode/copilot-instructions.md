@@ -1,4 +1,4 @@
-# Ghostwire Agent Test Execution Rules
+# Csharg Agent Test Execution Rules
 
 These rules apply to all coding agents working in this repository.
 
@@ -48,7 +48,7 @@ import (
 
 func TestFoo(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "ghostwire/internal/foo package")
+	RunSpecs(t, "csharg/internal/foo package")
 }
 ```
 
@@ -71,6 +71,16 @@ In tests, prefer slice and collection helpers from `github.com/thediveo/nonstd` 
 Never add test code to explicitly remove or kill stale containers, as container cleanup is automatically handled by `morbyd`'s `session.WithAutoCleaning(...)`.
 
 For temporary directories in Ginkgo specs, do not use `GinkgoT().TempDir()`; instead use the plain stdlib together with `DeferCleanup`, for example `tmpdir := Successful(os.MkdirTemp("", "mobydav-test-"))` followed by `DeferCleanup(os.RemoveAll, tmpdir)`.
+
+## End-to-End Tests
+
+End-to-end tests live in the `e2e/` package only and are opt-in: its suite skips itself unless the Ginkgo label filter explicitly selects the `e2e` label. Do not use build tags to gate them. `RunSpecs` already applies the `e2e` label suite-wide; use further labels (such as `k8s` or `tshark`) on specs to allow narrower selections.
+
+Run them explicitly, keeping the usual constraints:
+
+```bash
+go test -v -race -p 1 ./e2e/... -ginkgo.label-filter=e2e
+```
 
 ## Required Test Matrix
 
