@@ -22,6 +22,8 @@ var _ = Describe("csharg commands", func() {
 	It("keeps schtumm", func() {
 		rootCmd := newRootCmd()
 		rootCmd.SetArgs([]string{"--silent"})
+		rootCmd.SetOut(GinkgoWriter)
+		rootCmd.SetErr(GinkgoWriter)
 		Expect(rootCmd.Execute()).To(Succeed())
 	})
 

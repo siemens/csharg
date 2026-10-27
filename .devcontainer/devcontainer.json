@@ -30,16 +30,11 @@
             "num-programs": "1", // do never run package-level tests in parallel
             "race": true, // enable race detector
             "verbose": true,
-            "html": true, // generate coverage.html
-            "tags": "matchers"
+            "html": true // generate coverage.html
         },
         "./tshark": {}
     },
     "privileged": true,
-    "runArgs": [
-        "--pid=host",
-        "--cgroupns=host"
-    ],
     "securityOpt": [
         "apparmor=unconfined"
     ],
