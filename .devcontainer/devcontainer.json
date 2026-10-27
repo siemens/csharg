@@ -7,21 +7,29 @@
             "protocol": "http"
         }
     },
-    "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+    "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
     "features": {
-        "ghcr.io/thediveo/devcontainer-features/local-pkgsite:0": {},
-        "ghcr.io/thediveo/devcontainer-features/goreportcard:0": {},
-        "ghcr.io/thediveo/devcontainer-features/go-mod-upgrade:0": {},
-        "ghcr.io/thediveo/devcontainer-features/gocover:0": {
-            "root": true, // test both as ordinary user and root
+    "ghcr.io/devcontainers/features/node:2": {},
+        "ghcr.io/devcontainers/features/go:1": {},
+        "ghcr.io/thediveo/devcontainer-features/local-pkgsite:1": {
+            "port": "6060"
+        },
+        "ghcr.io/thediveo/devcontainer-features/pinact:0": {},
+        "ghcr.io/thediveo/devcontainer-features/go-mod-upgrade:1": {},
+        "ghcr.io/thediveo/devcontainer-features/lazygit:0": {},
+        "ghcr.io/devcontainers/features/docker-in-docker:4": {
+            "version": "latest",
+            "moby": false, // go for the upstream Docker-CE
+            "iptablesSwitchAtRuntime": false
+        },
+        "ghcr.io/thediveo/devcontainer-features/gocover:1": {
+            "root": false, // no tests need root
             "num-programs": "1", // do never run package-level tests in parallel
             "race": true, // enable race detector
             "verbose": true,
             "html": true, // generate coverage.html
             "tags": "matchers"
-        },
-        "ghcr.io/thediveo/devcontainer-features/pin-github-action:0": {},
-        "ghcr.io/thediveo/devcontainer-features/lazygit:0": {}
+        }
     },
     "privileged": true,
     "runArgs": [
@@ -36,7 +44,7 @@
         "PATH": "/home/vscode/go/bin:/go/bin:/usr/local/go/bin:${localEnv:PATH}"
     },
     "postCreateCommand": {
-        "go-for-root": "echo 'Defaults:vscode secure_path = \"/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/go/bin\"' | sudo tee -a /etc/sudoers.d/vscode",
+        "go-for-root": "echo 'Defaults:vscode secure_path = \"/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/go/bin\"' | sudo tee -a /etc/sudoers.d/vscode"
     },
     "customizations": {
         "vscode": {

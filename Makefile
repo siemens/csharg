@@ -18,6 +18,3 @@ clean: ## cleans up build and testing artefacts
 	rm -rf dist
 	find . -name __debug_bin -delete
 	rm -f coverage.html coverage.out coverage.txt
-
-run: ## runs csharg with optional ARGS=
-	go run -v -tags $(BUILDTAGS) ./cmd/csharg $(ARGS)

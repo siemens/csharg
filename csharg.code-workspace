@@ -11,7 +11,9 @@
             "--build-tags=matchers,pprof,kind"
         ],
         "go.alternateTools": {
-            "customFormatter": "golangci-lint-v2"
+            // golangci-lint on PATH instead of vscode-go's possibly stale own install.
+            "golangci-lint-v2": "golangci-lint",
+            "customFormatter": "golangci-lint"
         },
         "go.formatTool": "custom",
         "go.formatFlags": [

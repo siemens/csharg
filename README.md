@@ -1,5 +1,5 @@
 <img align="right" width="100" height="100" src="images/csharg-icon-100x100.png" style="padding: 0 0 1ex 0.8em">
-![Coverage](https://img.shields.io/badge/Coverage-82.1%25-brightgreen)
+![Coverage](https://img.shields.io/badge/Coverage-80.9%25-brightgreen)
 
 [![Siemens](https://img.shields.io/badge/github-siemens-009999?logo=github)](https://github.com/siemens)
 [![Industrial Edge](https://img.shields.io/badge/github-industrial%20edge-e39537?logo=github)](https://github.com/industrial-edge)
@@ -7,10 +7,9 @@
 
 # csharg
 
-[![PkgGoDev](https://pkg.go.dev/badge/github.com/siemens/csharg)](https://pkg.go.dev/github.com/siemens/csharg)
+[![PkgGoDev](https://pkg.go.dev/badge/github.com/siemens/csharg/v2)](https://pkg.go.dev/github.com/siemens/csharg/v2)
 [![GitHub](https://img.shields.io/github/license/siemens/csharg)](https://img.shields.io/github/license/siemens/csharg)
 ![build and test](https://github.com/siemens/csharg/workflows/build%20and%20test/badge.svg?branch=main)
-[![Go Report Card](https://goreportcard.com/badge/github.com/siemens/csharg)](https://goreportcard.com/report/github.com/siemens/csharg)
 
 `csharg` is a Golang module for easy CLI access to the
 [Packetflix](https://github.com/siemens/packetflix) capture service deployed to
@@ -84,17 +83,18 @@ This section doesn't aim to be a comprehensive documentation of the `csharg`CLI,
 but will give you an idea as to what you might be able to do with the `csharg`
 CLI. If in doubt, please use `csharg help` for up-to-date documentation.
 
-- `csharg list`: list available capture targets in a Kubernetes cluster.
+- `csharg list`: list available capture targets on a container host.
 - `csharg capture`: capture and live stream network traffic from a capture
   target, such as a pod, standalone container, et cetera.
 - `csharg help`: ask for help about any of the `csharg` commands.
 - `csharg options`: list the global command-line options which apply to all commands.
 - `csharg version`: show csharg version.
 
-The CLI `--host http://$HOSTNAME[:$PORT]` argument specifies hostname (DNS/label
-or IP address) and optional port number of the Packetflix service on container
-host. Standard deployments use port `:5001`. Please note that the port always
-needs to be specified, unless it is port `:80` (or `:443` for HTTPS).
+The CLI `--host [http://|https://]$HOSTNAME[:$PORT][/$PATH]` argument specifies
+hostname (DNS/label or IP address) and optional port number of the Packetflix
+service on a container host; the scheme defaults to `http://`. Standard
+deployments use port `:5001`. Please note that the port always needs to be
+specified, unless it is port `:80` (or `:443` for HTTPS).
 
 To list available capture targets in your container host or local KinD
 deployment:
@@ -106,7 +106,7 @@ deployment:
 - list network stacks which neither belong to pods nor stand-alone containers:
   `csharg --host ... list networks` (includes bind-mount'ed network stacks).
 - list only pods: `csharg --host ... list pods` (KinD).
-- list all capture targets (and we really mean *all*): `csharg -host ... list`.
+- list all capture targets (and we really mean *all*): `csharg --host ... list`.
 
 ### Controlling Capture Target List Output
 
@@ -114,7 +114,7 @@ deployment:
 format is specified. For example:
 
 ```
-$ csharg -host localhost:5001 list
+$ csharg --host localhost:5001 list
 TARGET                                                       TYPE         NODE
 accounts-daemon(997)                                         proc         localhost
 chrome(79357)                                                proc         localhost
@@ -162,12 +162,15 @@ column headers.
 
 In the most simple case, just specify a unique capture target name (such as a
 container name) and then `csharg` will stream the captured network traffic to
-stdout in pcapng format (please note the *podnamespace*/*podname* notation, with
-*podnamespace* being **mandatory**):
+stdout in pcapng format:
 
 ```sh
 csharg --host localhost:5001 capture container-name
 ```
+
+Pods need to be specified using the *podnamespace*/*podname* notation, with
+*podnamespace* being **mandatory**, unless using `csharg capture pod`, which
+defaults to the "default" namespace.
 
 Use option `-w `*`filename`* to write the packet capture stream into the file
 *filename*. As it is custom, `-w -` again writes to stdout (which is the default
@@ -212,23 +215,37 @@ Capture five minutes of network traffic on all network interfaces of container
 package main
 
 import (
-    "github.com/siemens/csharg"
+    "log"
     "os"
     "time"
+
+    "github.com/siemens/csharg/v2"
 )
 
 func main() {
     // Connect to the host-local Packetflix capture service. Default settings
-    // and service time limits (30s) apply. Sensibly, capture  streaming is
+    // and service time limits (30s) apply. Sensibly, capture streaming is
     // not time limited.
-    st, _ := csharg.NewSharkTankOnHost("http://localhost:5001", nil)
+    st, err := csharg.NewSharkTankOnHost("http://localhost:5001", nil)
+    if err != nil {
+        log.Fatal(err)
+    }
     // Create a new packet capture file...
-    f, _ := os.Create("my-container.pcapng")
+    f, err := os.Create("my-container.pcapng")
+    if err != nil {
+        log.Fatal(err)
+    }
     defer f.Close()
     // ...and run a network packet capture for five minutes on the container
-    // "my-container".
-    capt, _ := st.CaptureContainer(f, "my-container", nil)
-    capt.StopAfter(5*time.Minute)
+    // "my-container". On a standalone host, the node name is the host name
+    // of the capture service URL.
+    capt, err := st.CaptureContainer(f, "localhost", "my-container", nil)
+    if err != nil {
+        log.Fatal(err)
+    }
+    if err := capt.StopAfter(5 * time.Minute); err != nil {
+        log.Fatal(err)
+    }
 }
 ```
 
@@ -242,42 +259,11 @@ func main() {
 
   Not necessarily, as this is a _[Go](https://go.dev/)_ package.
 
-## VSCode Tasks
-
-The included `csharg.code-workspace` defines the following tasks:
-
-- **View Go module documentation** task: installs `pkgsite`, if not done already
-  so, then starts `pkgsite` and opens VSCode's integrated ("simple") browser to
-  show the csharg documentation.
-
-#### Aux Tasks
-
-- _pksite service_: auxilliary task to run `pkgsite` as a background service
-  using `scripts/pkgsite.sh`. The script leverages browser-sync and nodemon to
-  hot reload the Go module documentation on changes; many thanks to @mdaverde's
-  [_Build your Golang package docs
-  locally_](https://mdaverde.com/posts/golang-local-docs) for paving the way.
-  `scripts/pkgsite.sh` adds automatic installation of `pkgsite`, as well as the
-  `browser-sync` and `nodemon` npm packages for the local user.
-- _view pkgsite_: auxilliary task to open the VSCode-integrated "simple" browser
-  and pass it the local URL to open in order to show the module documentation
-  rendered by `pkgsite`. This requires a detour via a task input with ID
-  "_pkgsite_".
-
 ## Make Targets
 
 - `make`: lists all targets.
 - `make clean`: removes the build artefacts.
 - `make dist`: builds snapshot packages and archives of the csharg CLI binary.
-- `make pkgsite`: installs [`x/pkgsite`](golang.org/x/pkgsite/cmd/pkgsite), as
-  well as the [`browser-sync`](https://www.npmjs.com/package/browser-sync) and
-  [`nodemon`](https://www.npmjs.com/package/nodemon) npm packages first, if not
-  already done so. Then runs the `pkgsite` and hot reloads it whenever the
-  documentation changes.
-- `make report`: installs
-  [`@gojp/goreportcard`](https://github.com/gojp/goreportcard) if not yet done
-  so and then runs it on the code base.
-- `make vuln`: install (or updates) govuln and then checks the Go sources.
 
 # Contributing
 
