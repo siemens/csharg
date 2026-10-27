@@ -1,5 +1,4 @@
 SHELL:=/bin/bash
-GOGEN:=go generate .
 BUILDTAGS:="osusergo,netgo"
 
 .PHONY: help clean dist run
@@ -9,8 +8,7 @@ help: ## list available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
 dist: ## build snapshot csharg binary packages+archives in dist/
-# gorelease will run go generate anyway
-	@scripts/goreleaser.sh --snapshot --clean
+	@goreleaser release --snapshot --clean
 	@ls -lh dist/csharg_*
 	@echo "🏁  done"
 

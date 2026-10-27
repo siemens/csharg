@@ -17,6 +17,9 @@
         "ghcr.io/thediveo/devcontainer-features/pinact:0": {},
         "ghcr.io/thediveo/devcontainer-features/go-mod-upgrade:1": {},
         "ghcr.io/thediveo/devcontainer-features/lazygit:0": {},
+        "ghcr.io/postfinance/devcontainer-features/goreleaser:1": {
+            "version": "latest"
+        },
         "ghcr.io/devcontainers/features/docker-in-docker:4": {
             "version": "latest",
             "moby": false, // go for the upstream Docker-CE
@@ -41,7 +44,7 @@
     ],
     "remoteEnv": {
         "GOPATH": "/home/vscode/go",
-        "PATH": "/home/vscode/go/bin:/go/bin:/usr/local/go/bin:${localEnv:PATH}"
+        "PATH": "/home/vscode/go/bin:${containerEnv:PATH}"
     },
     "postCreateCommand": {
         "go-for-root": "echo 'Defaults:vscode secure_path = \"/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/go/bin\"' | sudo tee -a /etc/sudoers.d/vscode"
