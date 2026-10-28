@@ -12,17 +12,20 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
-	"os"
+	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/siemens/csharg/api"
-	"github.com/siemens/csharg/pcapng"
-	"github.com/siemens/csharg/websock"
-	log "github.com/sirupsen/logrus"
+	"github.com/thediveo/nonstd/xslog"
+
+	"github.com/siemens/csharg/v2/api"
+	"github.com/siemens/csharg/v2/pcapng"
+	"github.com/siemens/csharg/v2/websock"
 )
 
 // CaptureOptions describe a set of options giving more detailed control over
@@ -57,8 +60,9 @@ var AllNifs = Nifs{}
 // SharkTank gives access to network captures in clusters via the
 // SharkTank cluster capture service.
 type SharkTank interface {
-	// Lists the available capture targets in this cluster.
-	Targets() (ts api.Targets)
+	// Lists the available capture targets in this cluster, or returns an error
+	// if discovery fails.
+	Targets() (ts api.Targets, err error)
 	// Captures network traffic from a specific pod and send the captured packet
 	// stream to the writer w. The capture optionally can be restricted to only
 	// a subset of the pod's network interfaces. The pod name can be prefixed by
@@ -82,15 +86,19 @@ type SharkTank interface {
 }
 
 // CaptureStreamer gives control over an individual network packet capture.
+//
+// Stop, Wait, and StopAfter return why the capture ended: nil if it was stopped
+// or the capture service ended it normally, otherwise the error that broke the
+// capture stream or its writer.
 type CaptureStreamer interface {
 	// Stop this capture in an orderly manner. This operation will block until
 	// the capture has finally terminated. It is also idempotent.
-	Stop()
+	Stop() error
 	// Wait for the capture to terminate, but do not initiate the termination.
-	Wait()
+	Wait() error
 	// StopAfter waits the specified duration for the capture to terminate, and
 	// terminates it after the duration if necessary.
-	StopAfter(d time.Duration)
+	StopAfter(d time.Duration) error
 }
 
 // captureStreamer is the implementation of the CaptureStreamer interface.
@@ -99,30 +107,48 @@ type captureStreamer struct {
 	cws *websock.ReadingClientWebsocket
 	// Signals that the capture (and the capture stream) finally has ended.
 	done chan bool
+	// Set when the capture is being stopped on request.
+	stopping atomic.Bool
+	// Why the capture ended; only valid after done has been closed.
+	err error
 }
 
 // Stop the packet capture and waits for the capture to gracefully terminate.
 // See also Wait() for the usecase where a go routine needs to wait for the
 // capture to terminate, but will not initiate the termination itself.
-func (cs *captureStreamer) Stop() {
+func (cs *captureStreamer) Stop() error {
+	cs.stopping.Store(true)
 	cs.cws.Close()
+	<-cs.done
+	return cs.err
 }
 
 // Wait for the packet capture to terminate, without initiating it. See also
 // Stop().
-func (cs *captureStreamer) Wait() {
+func (cs *captureStreamer) Wait() error {
 	<-cs.done
+	return cs.err
 }
 
 // StopAfter waits for the packet capture to terminate and terminates it after
 // the specified duration if necessary.
-func (cs *captureStreamer) StopAfter(d time.Duration) {
+func (cs *captureStreamer) StopAfter(d time.Duration) error {
 	select {
 	case <-cs.done:
-		// We're toast.
+		return cs.err
 	case <-time.After(d):
-		cs.Stop()
+		return cs.Stop()
 	}
+}
+
+// endedBy returns the error a capture ended by, if any; requested stops and
+// normal closes by the capture service don't count as errors.
+func (cs *captureStreamer) endedBy(err error) error {
+	if cs.stopping.Load() ||
+		websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+		return nil
+	}
+	return err
 }
 
 // CompleteTarget completes the capture target description to the point that the
@@ -146,23 +172,26 @@ func CompleteTarget(t *api.Target, opts *CaptureOptions, ts *TargetCache) (*api.
 	// information, we need to first look it up. That's because the developer of
 	// this crap is slightly dumb.
 	if t.CaptureService == "" {
-		if t.Type == "pod" {
-			tcached, ok := ts.Pod(t.Name)
-			if !ok {
-				return nil, fmt.Errorf("non-existing target %+v", *t)
-			}
-			// Since we're going to update the capture target description, we
-			// make a shallow copy first
-			tshallow := *tcached
-			t = &tshallow
-		} else {
-			tcached, ok := ts.OnNode(t.NodeName, t.Prefix, t.Name)
-			if !ok {
-				return nil, fmt.Errorf("non-existing target %+v", *t)
-			}
-			tshallow := *tcached
-			t = &tshallow
+		if ts == nil {
+			return nil, errors.New("no capture target cache specified")
 		}
+		var tcached *api.Target
+		var ok bool
+		if t.Type == "pod" {
+			tcached, ok = ts.Pod(t.Prefix, t.Name)
+		} else {
+			tcached, ok = ts.OnNode(t.NodeName, t.Prefix, t.Name)
+		}
+		if !ok {
+			return nil, fmt.Errorf("non-existing target %+v", *t)
+		}
+		// The cache hands out copies, so we're free to update it.
+		t = tcached
+	}
+	if opts != nil && len(opts.Nifs) > 0 {
+		tshallow := *t
+		tshallow.NetworkInterfaces = slices.Clone(opts.Nifs)
+		t = &tshallow
 	}
 	// By now we will have the required information about the particular capture
 	// service instance responsible for our capture target.
@@ -181,10 +210,30 @@ func CompleteTarget(t *api.Target, opts *CaptureOptions, ts *TargetCache) (*api.
 // successfully connected websocket, a capture target specification, and capture
 // options. It then starts the capture by issuing a capture service request via
 // the websocket and then in the background streams the incomming network packet
-// data into the given Writer.
+// data into the given Writer. A nil opts uses the default capture options. On
+// error, StartCaptureStream closes the websocket.
 func StartCaptureStream(w io.Writer, ws *websocket.Conn, t *api.Target, opts *CaptureOptions) (cs CaptureStreamer, err error) {
-	log.Debugf("capturing from: %s %s", t.Type, t.Name)
-	log.Debugf("capturing from network interfaces: %s", strings.Join(t.NetworkInterfaces, ", "))
+	switch {
+	case ws == nil:
+		return nil, errors.New("no websocket specified")
+	case w == nil:
+		_ = ws.Close()
+		return nil, errors.New("no capture writer specified")
+	case t == nil:
+		_ = ws.Close()
+		return nil, errors.New("no capture target specified")
+	}
+	if opts == nil {
+		opts = &CaptureOptions{}
+	}
+	slog.Debug("starting capture",
+		slog.Group("target",
+			slog.String("type", t.Type),
+			slog.String("name", t.Name),
+		),
+		xslog.Lazy("interfaces", func() string {
+			return strings.Join(t.NetworkInterfaces, ",")
+		}))
 
 	csimpl := &captureStreamer{
 		// Wrap the websocket connection into something more "graceful" when it
@@ -194,11 +243,11 @@ func StartCaptureStream(w io.Writer, ws *websocket.Conn, t *api.Target, opts *Ca
 	}
 	cs = csimpl
 	// Sending the incomming packet capture data from the websocket to the
-	// writer is done in a separate go routine. Beyond "just" connecting the
-	// websocket stream to the writer, we need to handle either the websocket or
-	// the writer to break
+	// writer is done in a separate go routine. Whenever either the websocket or
+	// the writer breaks, the websocket gets closed before signalling the end.
 	go func() {
 		defer close(csimpl.done)
+		defer csimpl.closeAndDrain()
 		pcapedit := pcapng.NewStreamEditor(
 			w, t, opts.Filter, opts.AvoidPromiscuousMode)
 		for {
@@ -206,38 +255,36 @@ func StartCaptureStream(w io.Writer, ws *websocket.Conn, t *api.Target, opts *Ca
 			// closed/broken.
 			data, err := csimpl.cws.Read()
 			if err != nil {
-				log.Debugf("websocket packet data stream error: %s", err.Error())
+				slog.Debug("websocket packet data stream failure",
+					xslog.Error(err))
+				if err = csimpl.endedBy(err); err != nil {
+					csimpl.err = fmt.Errorf("capture stream broken: %w", err)
+				}
 				return
 			}
 			// Now forward the packet data into the Wireshark pipe. But pass it
 			// through our pcapng stream editor.
-			_, err = pcapedit.Write(data)
-			perr, ok := err.(*os.PathError)
-			if ok && (perr.Err == os.ErrClosed) {
-				log.Errorf("capture stream writer is fed up and does not accpet any more packets.")
-				go func() {
-					// We need to read further from the websocket in order to
-					// keep the control message interaction going during the
-					// graceful close. It's just that we're throwing away any
-					// packet capture data that might still arrive because it
-					// was already in flight.
-					log.Debug("draining websocket...")
-					for {
-						_, err := csimpl.cws.Read()
-						if err != nil {
-							break
-						}
-					}
-					log.Debug("...drained")
-				}()
-				return
-			} else if err != nil {
-				log.Errorf("capture stream writer failed: %s", err.Error())
+			if _, err := pcapedit.Write(data); err != nil {
+				slog.Debug("capture stream writer failure", xslog.Error(err))
+				if err = csimpl.endedBy(err); err != nil {
+					csimpl.err = fmt.Errorf("capture stream writer failure: %w", err)
+				}
 				return
 			}
 		}
 	}()
 	return cs, nil
+}
+
+// closeAndDrain gracefully closes the websocket, discarding any packet data
+// still in flight, so that the close handshake can complete.
+func (cs *captureStreamer) closeAndDrain() {
+	go cs.cws.Close()
+	for {
+		if _, err := cs.cws.Read(); err != nil {
+			return
+		}
+	}
 }
 
 // CaptureServiceHeaders is a convenience function that builds the set of
@@ -247,8 +294,14 @@ func StartCaptureStream(w io.Writer, ws *websocket.Conn, t *api.Target, opts *Ca
 // to HTTP headers. This bug is documented, but doesn't seem to get any
 // attention to fix it, which really is unfortunate. Anyway, we use the capture
 // service headers also when not passing broken Kubernetes remote API servers,
-// to keep things more uniform.
+// to keep things more uniform. A nil opts uses the default capture options.
 func CaptureServiceHeaders(t *api.Target, opts *CaptureOptions) (header *http.Header, err error) {
+	if t == nil {
+		return nil, errors.New("no capture target specified")
+	}
+	if opts == nil {
+		opts = &CaptureOptions{}
+	}
 	ctext, err := json.Marshal(t)
 	if err != nil {
 		return
@@ -283,8 +336,14 @@ func CaptureServiceHeaders(t *api.Target, opts *CaptureOptions) (header *http.He
 // -- unless there's a broken Kubernetes remote API proxy in between where we
 // query params get lost in transit, but we uniformly use the query params
 // whenever we contact the SharkTank capture service, regardless of the path
-// we'll take.
+// we'll take. A nil opts uses the default capture options.
 func CaptureServiceQueryParams(t *api.Target, opts *CaptureOptions) (values *url.Values, err error) {
+	if t == nil {
+		return nil, errors.New("no capture target specified")
+	}
+	if opts == nil {
+		opts = &CaptureOptions{}
+	}
 	ctext, err := json.Marshal(t)
 	if err != nil {
 		return

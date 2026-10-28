@@ -7,19 +7,31 @@ package pcapng
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
+	"log/slog"
+	"math"
 	"regexp"
 	"strings"
 
-	"github.com/siemens/csharg/api"
-	log "github.com/sirupsen/logrus"
+	"github.com/thediveo/nonstd/xslog"
 	"gopkg.in/yaml.v3"
+
+	"github.com/siemens/csharg/v2/api"
 )
 
 const (
 	// yamlmarker describes the "magic" signature of a capture target YAML
 	// document.
 	targetmarker = "---\n# capture target information\n"
+
+	// minSHBLen is the length of an SHB without any options: block type,
+	// length, byte-order magic, version, section length, trailing length.
+	minSHBLen = 4 + 4 + 4 + 2 + 2 + 8 + 4
+	// maxSHBLen limits how much stream data gets buffered for SHB editing.
+	maxSHBLen = 1 << 20
+	// maxOptionValueLen is the largest value length an option can encode.
+	maxOptionValueLen = math.MaxUint16
 )
 
 var (
@@ -41,6 +53,7 @@ type StreamEditor struct {
 	container     *api.Target
 	captureFilter string
 	noProm        bool
+	err           error
 }
 
 // ContainerInfo represents the container information to be added to the capture
@@ -77,17 +90,27 @@ func NewStreamEditor(sink io.Writer, container *api.Target, captureFilter string
 // Write writes some octets into the pcapng stream editor which it might then
 // edit if required before writing the (edited) stream to the associated writer
 // sink.
-func (pe *StreamEditor) Write(b []byte) (n int, err error) {
-	n = len(b)
-	b = pe.process(b)
-	if _, err = pe.sink.Write(b); err != nil {
-		log.Debugf("pcapng stream broken: %s", err.Error())
-		return
+//
+// As the edited stream cannot be mapped back onto b, Write reports zero octets
+// written when the sink fails or writes short, and then fails all further
+// writes with the same error.
+func (pe *StreamEditor) Write(b []byte) (int, error) {
+	if pe.err != nil {
+		return 0, pe.err
 	}
-	// During processing the SHB we might not (yet) have data to hand down to
-	// our sink, so we must not report that amount, but instead the original
-	// amount of data, as otherwise our caller might fail.
-	return n, nil
+	out := pe.process(b)
+	n, err := pe.sink.Write(out)
+	if err == nil && n < len(out) {
+		err = io.ErrShortWrite
+	}
+	if err != nil {
+		slog.Debug("pcapng stream broken", xslog.Error(err))
+		pe.err = err
+		return 0, err
+	}
+	// While collecting the SHB, nothing might reach the sink yet, but all of b
+	// has been consumed nevertheless.
+	return len(b), nil
 }
 
 // Processes a block of packet stream data, editing the first section header
@@ -124,11 +147,13 @@ func (pe *StreamEditor) processSHB() []byte {
 	major := pe.Endian.Uint16(pe.shb[12:14])
 	minor := pe.Endian.Uint16(pe.shb[14:16])
 	sectionLen := pe.Endian.Uint64(pe.shb[16:24])
-	log.Debugf("section header block: version %d.%d", major, minor)
+	slog.Debug("found section header block",
+		slog.String("version", fmt.Sprintf("%d.%d", major, minor)))
 	if sectionLen == ^uint64(0) {
-		log.Debug("signalled unknown section length")
+		slog.Debug("signalled unknown section length")
 	} else {
-		log.Debugf("signalled overall section length: %d", sectionLen)
+		slog.Debug("signalled overall section length",
+			slog.Uint64("length", sectionLen))
 	}
 	// ...then comes a list of options, terminated by an end-of-options
 	// option.
@@ -138,12 +163,13 @@ func (pe *StreamEditor) processSHB() []byte {
 	// Note, the block length is the total block length, including the
 	// leading and trailing 32bit block length fields; it's NOT the netto
 	// content.
-	for offset < pe.shbLen-4 {
-		opt, skip := NewOption(pe.shb[offset:], pe.Endian)
-		offset += uint32(skip)
+	optsEnd := pe.shbLen - 4
+	for offset < optsEnd {
+		opt, skip := NewOption(pe.shb[offset:optsEnd], pe.Endian)
 		if opt == nil {
 			break
 		}
+		offset += uint32(skip)
 		if opt.Code == OptComment && firstComment == nil {
 			// Do not append the first comment, but store it aside for
 			// modification.
@@ -152,15 +178,17 @@ func (pe *StreamEditor) processSHB() []byte {
 			options = append(options, opt)
 		}
 		if opt.Code <= OptSHBUserAppl {
-			log.Debugf("option type %d: \"%s\"", opt.Code, opt.String())
+			slog.Debug("option",
+				slog.Int("type", int(opt.Code)),
+				slog.String("value", opt.String()))
 		} else {
-			log.Debugf("option type %d: ...", opt.Code)
+			slog.Debug("option", slog.Int("type", int(opt.Code)))
 		}
 	}
 	// Edit the first comment -- or be the first to create one :p
 	var comment string
 	if firstComment != nil {
-		log.Debug("removing existing SHB comment with container meta information, then updating")
+		slog.Debug("removing existing SHB comment with container meta information, then updating")
 		comment = firstComment.String()
 		if start := markerstart.FindStringIndex(comment); len(start) == 2 {
 			if comment[start[0]] == '\n' {
@@ -179,14 +207,9 @@ func (pe *StreamEditor) processSHB() []byte {
 			}
 		}
 	} else {
-		log.Debug("creating fresh SHB comment with container meta information")
+		slog.Debug("creating fresh SHB comment with container meta information")
 	}
-	// Append target info YAML to comment, so make sure there always is a proper
-	// line break before our YAML.
-	if comment != "" && !strings.HasSuffix(comment, "\n") {
-		comment += "\n"
-	}
-	comment += targetmarker
+	targetInfo := targetmarker
 	ci := ContainerInfo{
 		ContainerName: pe.container.Name,
 		ContainerType: pe.container.Type,
@@ -201,10 +224,21 @@ func (pe *StreamEditor) processSHB() []byte {
 	}
 	y, err := yaml.Marshal(ci)
 	if err == nil {
-		comment += string(y)
+		targetInfo += string(y)
 	} else {
-		log.Errorf("cannot create container YAML meta data: %s", err.Error())
+		slog.Error("cannot create container YAML meta data",
+			xslog.Error(err))
 	}
+	// Append target info YAML to comment, so make sure there always is a proper
+	// line break before our YAML.
+	if comment != "" && !strings.HasSuffix(comment, "\n") {
+		comment += "\n"
+	}
+	if len(comment)+len(targetInfo) > maxOptionValueLen {
+		slog.Warn("existing SHB comment too long, dropping it in favor of target information")
+		comment = ""
+	}
+	comment += targetInfo
 	options = append(
 		[]*Option{
 			{Code: OptComment, Value: []byte(comment)}},
@@ -243,17 +277,22 @@ func (pe *StreamEditor) shbLenEndianness() bool {
 	// "byte-order magic" ... which tells us the endianness of values, such
 	// as the block length.
 	if !bytes.Equal(pe.shb[0:4], []byte{0x0a, 0x0d, 0x0d, 0x0a}) {
-		log.Error("invalid packet capture stream; must begin with section header block")
+		slog.Error("invalid packet capture stream; must begin with section header block")
 		return false
 	}
 	if bytes.Equal(pe.shb[8:12], []byte{0x1a, 0x2b, 0x3c, 0x4d}) {
 		pe.Endian = binary.BigEndian
-		log.Debug("section in packet capture stream is big endian")
+		slog.Debug("section in packet capture stream is big endian")
 	} else {
 		pe.Endian = binary.LittleEndian
-		log.Debug("section in packet capture stream is little endian")
+		slog.Debug("section in packet capture stream is little endian")
 	}
 	pe.shbLen = pe.Endian.Uint32(pe.shb[4:8])
+	if pe.shbLen < minSHBLen || pe.shbLen > maxSHBLen || pe.shbLen%4 != 0 {
+		slog.Error("invalid section header block length",
+			slog.Uint64("length", uint64(pe.shbLen)))
+		return false
+	}
 	return true
 }
 
@@ -283,10 +322,18 @@ const (
 // NewOption returns a new pcapng Option read from the buffer using the
 // given endianness, as well as the number of octets to skip over to arrive
 // at the next option. If the last option is reached, then nil is returned,
-// together with the amount of octets to skip past the end-of-options mark.
+// together with the amount of octets to skip past the end-of-options mark. If
+// buff is too short to hold a complete option, nil and a zero skip are
+// returned.
 func NewOption(buff []byte, endian binary.ByteOrder) (opt *Option, skip uint) {
+	if len(buff) < 4 {
+		return nil, 0
+	}
 	code := endian.Uint16(buff)
 	length := endian.Uint16(buff[2:4])
+	if 4+int(length) > len(buff) {
+		return nil, 0
+	}
 	// Calculate overall length of this option, and make sure to align it to
 	// the next 32bit boundary.
 	skip = uint(2+2) + uint(length)
@@ -297,7 +344,7 @@ func NewOption(buff []byte, endian binary.ByteOrder) (opt *Option, skip uint) {
 	// object, otherwise simply return nil. The amount of octets to skip is
 	// already calculated correctly for all cases.
 	if code != OptEndofOpt || length != 0 {
-		opt = &Option{Code: code, Value: buff[4 : 4+length]}
+		opt = &Option{Code: code, Value: buff[4 : 4+int(length)]}
 	}
 	return
 }
@@ -309,20 +356,22 @@ func (o *Option) String() string {
 }
 
 // Bytes returns the octets encoding the option, using the specified
-// endianness.
+// endianness. Values longer than an option can encode get truncated.
 func (o *Option) Bytes(endian binary.ByteOrder) (b []byte) {
 	if o == nil {
 		return []byte{0, 0, 0, 0}
 	}
-	value := []byte(o.Value)
-	length := uint16(len(value))
-	by := make([]byte, uint16(2+2)+length)
+	value := o.Value
+	if len(value) > maxOptionValueLen {
+		value = value[:maxOptionValueLen]
+	}
+	length := len(value)
+	by := make([]byte, 4+length, 4+length+3)
 	endian.PutUint16(by[0:2], o.Code)
-	endian.PutUint16(by[2:4], length)
+	endian.PutUint16(by[2:4], uint16(length))
 	copy(by[4:], value)
 	if length&0x3 != 0 {
-		pad := [3]byte{0, 0, 0}
-		by = append(by, pad[0:4-(length&0x3)]...)
+		by = append(by, make([]byte, 4-(length&0x3))...)
 	}
 	return by
 }

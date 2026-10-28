@@ -14,16 +14,16 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"path"
 	"strings"
 
-	"github.com/siemens/csharg/api"
-
 	"github.com/gorilla/websocket"
-	log "github.com/sirupsen/logrus"
+	"github.com/thediveo/nonstd/xslog"
+
+	"github.com/siemens/csharg/v2/api"
 )
 
 // SharkTankOnHostOptions allows some degree of control over how to use a
@@ -33,12 +33,15 @@ type SharkTankOnHostOptions struct {
 	InsecureSkipVerify bool
 }
 
+// maxDiscoveryResponseSize limits the size of target discovery responses.
+const maxDiscoveryResponseSize = 16 << 20
+
 // NewSharkTankOnHost returns a new host capturer object to capture directly
-// from host targets using a Packetflix service, and accessing it via host+port
-// and an optional service path.
+// from host targets using a Packetflix service, and accessing it via host, an
+// optional port, and an optional service path.
 func NewSharkTankOnHost(hosturl string, opts *SharkTankOnHostOptions) (st SharkTank, err error) {
 	// First checkpoint: if it doesn't start with the http/s scheme, then go for http.
-	if !strings.HasPrefix(hosturl, "http:") && !strings.HasPrefix(hosturl, "https://") {
+	if !strings.HasPrefix(hosturl, "http://") && !strings.HasPrefix(hosturl, "https://") {
 		hosturl = "http://" + hosturl
 	}
 	surl, err := url.Parse(hosturl)
@@ -74,6 +77,8 @@ type hostsharktank struct {
 	opts SharkTankOnHostOptions
 	// Cached capture targets
 	cache TargetCache
+	// Discovery transport; nil uses http.DefaultTransport.
+	transport http.RoundTripper
 }
 
 // Captures network traffic from a specific pod and send the captured packet
@@ -130,25 +135,36 @@ func needsTargetDiscovery(t *api.Target) bool {
 // specific (set of) network interface(s) for this target. The captured packets
 // are then send to the given Writer. This implementation hides the details how
 // to connect to the discovery/capture service.
+//
+// If t lacks network interfaces, Capture completes it from the cached capture
+// targets, discovering them first only if the cache is empty.
 func (hc *hostsharktank) Capture(w io.Writer, t *api.Target, opts *CaptureOptions) (cs CaptureStreamer, err error) {
+	if t == nil {
+		return nil, errors.New("no capture target specified")
+	}
+	if w == nil {
+		return nil, errors.New("no capture writer specified")
+	}
 	if opts == nil {
 		opts = &CaptureOptions{}
 	}
-	// Fill the cache only if we don't have to necessary information we might
-	// want to fill in...
-	if hc.cache.IsEmpty() && needsTargetDiscovery(t) {
-		hc.Targets()
+	// Discover (or reuse cached) targets only if the caller didn't supply the
+	// network interfaces to capture from.
+	if needsTargetDiscovery(t) {
+		if _, err = hc.Targets(); err != nil {
+			return
+		}
 		if t, err = CompleteTarget(t, opts, &hc.cache); err != nil {
 			return
 		}
 	} else {
-		log.Debug("skipping unneeded target discovery")
+		slog.Debug("skipping unneeded target discovery")
 	}
 	// Prepare the necessary URL query parameters and request headers in order
 	// to suckcessfully start a capture...
 	wsheaders, err := CaptureServiceHeaders(t, opts)
 	if err != nil {
-		log.Errorf("service request header failure: %q", err.Error())
+		slog.Error("service request header failure", xslog.Error(err))
 		return
 	}
 	if hc.opts.BearerToken != "" {
@@ -156,7 +172,7 @@ func (hc *hostsharktank) Capture(w io.Writer, t *api.Target, opts *CaptureOption
 	}
 	query, err := CaptureServiceQueryParams(t, opts)
 	if err != nil {
-		log.Errorf("service request query parameter failure: %q", err.Error())
+		slog.Error("service request query parameter failure", xslog.Error(err))
 		return
 	}
 	apiurl := *hc.hosturl
@@ -169,7 +185,9 @@ func (hc *hostsharktank) Capture(w io.Writer, t *api.Target, opts *CaptureOption
 	apiurl.RawQuery = query.Encode()
 
 	// Finally: off to capture...
-	log.Debugf("connecting to capture service %q, time limit %s", apiurl.String(), hc.opts.Timeout)
+	slog.Debug("connecting to capture service",
+		slog.String("api", apiurl.String()),
+		slog.Any("timeout", hc.opts.Timeout))
 	wsd := &websocket.Dialer{
 		Proxy:            http.ProxyFromEnvironment,
 		HandshakeTimeout: hc.opts.Timeout,
@@ -179,15 +197,17 @@ func (hc *hostsharktank) Capture(w io.Writer, t *api.Target, opts *CaptureOption
 	}
 	wscon, resp, err := wsd.Dial(apiurl.String(), *wsheaders)
 	if err != nil {
-		log.Errorf("cannot contact capture service via websocket: %s", err.Error())
+		slog.Error("cannot contact capture service via websocket", xslog.Error(err))
 		return
 	}
-	log.Debugf("capture service initial HTTP response: %+v", *resp)
+	slog.Debug("capture service initial HTTP response",
+		xslog.Lazy("response", func() string { return fmt.Sprint(*resp) }))
 	return StartCaptureStream(w, wscon, t, opts)
 }
 
-// Targets discovers the available capture targets in this cluster.
-func (hc *hostsharktank) Targets() (ts api.Targets) {
+// Targets discovers the available capture targets on this host. The targets'
+// node name is the host name of the service URL, without any port.
+func (hc *hostsharktank) Targets() (ts api.Targets, err error) {
 	return hc.discover()
 }
 
@@ -199,55 +219,65 @@ func (hc *hostsharktank) Clear() {
 
 // Discovers the available capture targets on a standalone Docker host from the
 // capture service,  sending an HTTP(S) GET request to the given service URL.
-func (hc *hostsharktank) discover() (ts api.Targets) {
+func (hc *hostsharktank) discover() (api.Targets, error) {
 	// If we already have a cached set of capture targets, then avoid the
 	// roundtrip to the cluster capture service and instead quickly return the
 	// cached set.
 	if !hc.cache.IsEmpty() {
-		return hc.cache.Targets()
+		return hc.cache.Targets(), nil
 	}
 	// Derive the discovery service API URL from the base URL for the SharkTank
 	// cluster capture service. Then issue a simple HTTP/S GET request and hope
 	// that the result does make sense in that it can be decoded.
 	apiurl := *hc.hosturl
 	apiurl.Path = path.Join(apiurl.Path, "discover/mobyshark")
-	log.Debugf("querying targets from GhostWire-on-Packetflix service %q, time limit %s", apiurl.String(), hc.opts.Timeout)
-	httptrans := http.DefaultTransport.(*http.Transport)
-	if hc.opts.InsecureSkipVerify && apiurl.Scheme == "https" {
-		httptrans.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-	}
+	slog.Debug("querying targets from GhostWire-on-Packetflix service",
+		slog.String("api", apiurl.String()),
+		slog.Any("timeout", hc.opts.Timeout))
 	httpclient := &http.Client{
 		Timeout:   hc.opts.Timeout,
-		Transport: httptrans,
+		Transport: hc.transport,
+	}
+	if hc.opts.InsecureSkipVerify && apiurl.Scheme == "https" {
+		// Clone so as to never weaken TLS for other users of the default transport.
+		httptrans := http.DefaultTransport.(*http.Transport).Clone()
+		httptrans.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+		httpclient.Transport = httptrans
+		defer httptrans.CloseIdleConnections()
 	}
 	req, err := http.NewRequest("GET", apiurl.String(), nil)
 	if err != nil {
-		log.Errorf("cannot create new HTTP request: %s", err.Error())
-		return api.Targets{}
+		return nil, fmt.Errorf("cannot create target discovery request: %w", err)
 	}
 	if hc.opts.BearerToken != "" {
 		req.Header.Set("Authorization", "Bearer "+hc.opts.BearerToken)
 	}
 	res, err := httpclient.Do(req)
 	if err != nil {
-		log.Errorf("querying targets from GhostWire-on-Packetflix service failed: %s", err.Error())
-		return api.Targets{}
+		return nil, fmt.Errorf("querying targets from GhostWire-on-Packetflix service failed: %w", err)
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("querying targets from GhostWire-on-Packetflix service failed: %s", res.Status)
+	}
 	var td api.GwTargetList
-	err = json.NewDecoder(res.Body).Decode(&td)
+	body := &io.LimitedReader{R: res.Body, N: maxDiscoveryResponseSize + 1}
+	err = json.NewDecoder(body).Decode(&td)
 	if err != nil {
-		log.Errorf("cannot decode targets from GhostWire-on-Packetflix service: %s", err.Error())
-		return api.Targets{}
+		if body.N <= 0 {
+			return nil, fmt.Errorf("targets from GhostWire-on-Packetflix service exceed %d octets",
+				maxDiscoveryResponseSize)
+		}
+		return nil, fmt.Errorf("cannot decode targets from GhostWire-on-Packetflix service: %w", err)
 	}
 	// Since we don't have the cluster capture frontend service, we need to fill
 	// in some missing data to get a target list consistent with what a cluster
 	// capture service would return.
-	hostn, _, _ := net.SplitHostPort(hc.hosturl.Host)
+	hostn := hc.hosturl.Hostname()
 	for _, t := range td.Targets {
 		t.NodeName = hostn
 	}
 	// Cache the capture target descriptions for further quick reference.
 	hc.cache.Set(td.Targets)
-	return td.Targets
+	return td.Targets, nil
 }

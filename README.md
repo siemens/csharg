@@ -6,18 +6,18 @@
 
 # csharg
 
-[![PkgGoDev](https://pkg.go.dev/badge/github.com/siemens/csharg)](https://pkg.go.dev/github.com/siemens/csharg)
+[![PkgGoDev](https://pkg.go.dev/badge/github.com/siemens/csharg/v2)](https://pkg.go.dev/github.com/siemens/csharg/v2)
 [![GitHub](https://img.shields.io/github/license/siemens/csharg)](https://img.shields.io/github/license/siemens/csharg)
 ![build and test](https://github.com/siemens/csharg/workflows/build%20and%20test/badge.svg?branch=main)
-[![Go Report Card](https://goreportcard.com/badge/github.com/siemens/csharg)](https://goreportcard.com/report/github.com/siemens/csharg)
+![Coverage](https://img.shields.io/badge/Coverage-90.6%25-brightgreen)
 
-`csharg` is a Golang module for easy CLI access to the
+`csharg/v2` is a Golang module for easy CLI access to the
 [Packetflix](https://github.com/siemens/packetflix) capture service deployed to
 container hosts, such as [Edgeshark](https://github.com/siemens/edgeshark) on
 [Siemens Industrial Edge](https://github.com/industrial-edge) and also
 standalone Docker hosts.
 
-`csharg` is part of the "Edgeshark" project that consist of several
+`csharg/v2` is part of the "Edgeshark" project that consist of several
 repositories:
 - [Edgeshark Hub repository](https://github.com/siemens/edgeshark)
 - [G(h)ostwire discovery service](https://github.com/siemens/ghostwire)
@@ -31,7 +31,7 @@ repositories:
 
 ## Usage
 
-`csharg` can be used in different ways:
+`csharg/v2` can be used in different ways:
 
 - as the standalone CLI program `csharg`, such as in:
 
@@ -48,7 +48,61 @@ repositories:
   integrating the `csharg` module without having to care about details of the
   Packetflix capture service API.
 
-![Overview](images/csharg.drawio.svg)
+```mermaid
+flowchart TB
+    subgraph extcap-usage["Wireshark extcap plugin"]
+        direction BT
+        ws1["Wireshark"]
+        extcap["csharg-extcap<br/>csharg (go mod)"]
+        extcap -->|named pipe| ws1
+    end
+
+    subgraph cli-usage["$ csharg capture ... | wireshark -k -i -"]
+        direction BT
+        ws2["Wireshark"]
+        cli["csharg CLI<br/>csharg (go mod)"]
+        cli -->|pipe| ws2
+    end
+
+    subgraph file-usage["$ csharg capture ... #gt; capture.pcapng"]
+        direction BT
+        pcapng["capture.pcapng"]
+        app["application (go)<br/>csharg (go mod)"]
+        app -->|write| pcapng
+    end
+
+    extcap-usage --> net(["network<br/>HTTP + WS or HTTPS + WSS"])
+    cli-usage --> net
+    file-usage --> net
+
+    subgraph host["Container Host"]
+        direction TB
+        pf1["Packetflix :5001"] --> gw1["G(h)ostwire"]
+    end
+
+    subgraph ied["Siemens Industrial Edge"]
+        direction TB
+        subgraph edgeshark["Edgeshark App"]
+            direction TB
+            pf2["Packetflix :5001"] --> gw2["G(h)ostwire"]
+        end
+    end
+
+    net -->|"$ csharg --host http://foo:5001 capture ...<br/>csharg.NewSharkTankOnHost(...)"| host
+    net -->|"$ csharg --host http://foo:5001 capture ...<br/>csharg.NewSharkTankOnHost(...)"| ied
+
+    classDef wireshark fill:#203fdb,color:#fff,stroke:none
+    classDef extcap fill:#005454,color:#fff,stroke:none
+    classDef cli fill:#78003C,color:#fff,stroke:none
+    classDef gomod fill:#5C7299,color:#fff,stroke:none
+    classDef file fill:#fff,stroke:#000
+    class ws1,ws2 wireshark
+    class extcap extcap
+    class cli cli
+    class app gomod
+    class pcapng file
+    style edgeshark fill:#ABE0D6
+```
 
 key:
 - `$ csharg ...` denotes a CLI command.
@@ -83,17 +137,18 @@ This section doesn't aim to be a comprehensive documentation of the `csharg`CLI,
 but will give you an idea as to what you might be able to do with the `csharg`
 CLI. If in doubt, please use `csharg help` for up-to-date documentation.
 
-- `csharg list`: list available capture targets in a Kubernetes cluster.
+- `csharg list`: list available capture targets on a container host.
 - `csharg capture`: capture and live stream network traffic from a capture
   target, such as a pod, standalone container, et cetera.
 - `csharg help`: ask for help about any of the `csharg` commands.
 - `csharg options`: list the global command-line options which apply to all commands.
 - `csharg version`: show csharg version.
 
-The CLI `--host http://$HOSTNAME[:$PORT]` argument specifies hostname (DNS/label
-or IP address) and optional port number of the Packetflix service on container
-host. Standard deployments use port `:5001`. Please note that the port always
-needs to be specified, unless it is port `:80` (or `:443` for HTTPS).
+The CLI `--host [http://|https://]$HOSTNAME[:$PORT][/$PATH]` argument specifies
+hostname (DNS/label or IP address) and optional port number of the Packetflix
+service on a container host; the scheme defaults to `http://`. Standard
+deployments use port `:5001`. Please note that the port always needs to be
+specified, unless it is port `:80` (or `:443` for HTTPS).
 
 To list available capture targets in your container host or local KinD
 deployment:
@@ -105,7 +160,7 @@ deployment:
 - list network stacks which neither belong to pods nor stand-alone containers:
   `csharg --host ... list networks` (includes bind-mount'ed network stacks).
 - list only pods: `csharg --host ... list pods` (KinD).
-- list all capture targets (and we really mean *all*): `csharg -host ... list`.
+- list all capture targets (and we really mean *all*): `csharg --host ... list`.
 
 ### Controlling Capture Target List Output
 
@@ -113,7 +168,7 @@ deployment:
 format is specified. For example:
 
 ```
-$ csharg -host localhost:5001 list
+$ csharg --host localhost:5001 list
 TARGET                                                       TYPE         NODE
 accounts-daemon(997)                                         proc         localhost
 chrome(79357)                                                proc         localhost
@@ -161,12 +216,15 @@ column headers.
 
 In the most simple case, just specify a unique capture target name (such as a
 container name) and then `csharg` will stream the captured network traffic to
-stdout in pcapng format (please note the *podnamespace*/*podname* notation, with
-*podnamespace* being **mandatory**):
+stdout in pcapng format:
 
 ```sh
 csharg --host localhost:5001 capture container-name
 ```
+
+Pods need to be specified using the *podnamespace*/*podname* notation, with
+*podnamespace* being **mandatory**, unless using `csharg capture pod`, which
+defaults to the "default" namespace.
 
 Use option `-w `*`filename`* to write the packet capture stream into the file
 *filename*. As it is custom, `-w -` again writes to stdout (which is the default
@@ -211,23 +269,37 @@ Capture five minutes of network traffic on all network interfaces of container
 package main
 
 import (
-    "github.com/siemens/csharg"
+    "log"
     "os"
     "time"
+
+    "github.com/siemens/csharg/v2"
 )
 
 func main() {
     // Connect to the host-local Packetflix capture service. Default settings
-    // and service time limits (30s) apply. Sensibly, capture  streaming is
+    // and service time limits (30s) apply. Sensibly, capture streaming is
     // not time limited.
-    st, _ := csharg.NewSharkTankOnHost("http://localhost:5001", nil)
+    st, err := csharg.NewSharkTankOnHost("http://localhost:5001", nil)
+    if err != nil {
+        log.Fatal(err)
+    }
     // Create a new packet capture file...
-    f, _ := os.Create("my-container.pcapng")
+    f, err := os.Create("my-container.pcapng")
+    if err != nil {
+        log.Fatal(err)
+    }
     defer f.Close()
     // ...and run a network packet capture for five minutes on the container
-    // "my-container".
-    capt, _ := st.CaptureContainer(f, "my-container", nil)
-    capt.StopAfter(5*time.Minute)
+    // "my-container". On a standalone host, the node name is the host name
+    // of the capture service URL.
+    capt, err := st.CaptureContainer(f, "localhost", "my-container", nil)
+    if err != nil {
+        log.Fatal(err)
+    }
+    if err := capt.StopAfter(5 * time.Minute); err != nil {
+        log.Fatal(err)
+    }
 }
 ```
 
@@ -241,42 +313,32 @@ func main() {
 
   Not necessarily, as this is a _[Go](https://go.dev/)_ package.
 
-## VSCode Tasks
-
-The included `csharg.code-workspace` defines the following tasks:
-
-- **View Go module documentation** task: installs `pkgsite`, if not done already
-  so, then starts `pkgsite` and opens VSCode's integrated ("simple") browser to
-  show the csharg documentation.
-
-#### Aux Tasks
-
-- _pksite service_: auxilliary task to run `pkgsite` as a background service
-  using `scripts/pkgsite.sh`. The script leverages browser-sync and nodemon to
-  hot reload the Go module documentation on changes; many thanks to @mdaverde's
-  [_Build your Golang package docs
-  locally_](https://mdaverde.com/posts/golang-local-docs) for paving the way.
-  `scripts/pkgsite.sh` adds automatic installation of `pkgsite`, as well as the
-  `browser-sync` and `nodemon` npm packages for the local user.
-- _view pkgsite_: auxilliary task to open the VSCode-integrated "simple" browser
-  and pass it the local URL to open in order to show the module documentation
-  rendered by `pkgsite`. This requires a detour via a task input with ID
-  "_pkgsite_".
-
 ## Make Targets
 
 - `make`: lists all targets.
 - `make clean`: removes the build artefacts.
 - `make dist`: builds snapshot packages and archives of the csharg CLI binary.
-- `make pkgsite`: installs [`x/pkgsite`](golang.org/x/pkgsite/cmd/pkgsite), as
-  well as the [`browser-sync`](https://www.npmjs.com/package/browser-sync) and
-  [`nodemon`](https://www.npmjs.com/package/nodemon) npm packages first, if not
-  already done so. Then runs the `pkgsite` and hot reloads it whenever the
-  documentation changes.
-- `make report`: installs
-  [`@gojp/goreportcard`](https://github.com/gojp/goreportcard) if not yet done
-  so and then runs it on the code base.
-- `make vuln`: install (or updates) govuln and then checks the Go sources.
+- `make e2e`: runs the opt-in end-to-end tests.
+
+## End-to-End Tests
+
+The end-to-end tests in `e2e/` run csharg against a real Packetflix capture
+service and thus are opt-in: plain `go test ./...` skips them. Run them by
+selecting the `e2e` Ginkgo label, or simply using `make e2e`:
+
+```bash
+go test -v -race -p 1 ./e2e/... -ginkgo.label-filter=e2e
+```
+
+Further labels narrow the selection, for instance `-ginkgo.label-filter='e2e &&
+!k8s'`. Label filters that don't explicitly select `e2e`, such as `'!k8s'`,
+still skip the end-to-end tests.
+
+The end-to-end tests require a local Docker engine that allows containers
+sharing the host's PID namespace with additional capabilities, as well as
+`tshark` and `capinfos` (already baked into the devcontainer). They deploy the `ghcr.io/siemens/ghostwire` and
+`ghcr.io/siemens/packetflix` services together with `busybox` capture targets,
+and then automatically clean up afterwards.
 
 # Contributing
 
@@ -284,6 +346,6 @@ Please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License and Copyright
 
-(c) Siemens AG 2023
+(c) Siemens AG 2023, 2026
 
 [SPDX-License-Identifier: MIT](LICENSE)

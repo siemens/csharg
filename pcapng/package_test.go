@@ -10,15 +10,11 @@ package pcapng
 import (
 	"testing"
 
-	log "github.com/sirupsen/logrus"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 func TestPcapng(t *testing.T) {
-	log.SetLevel(log.DebugLevel)
-
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Csharg pcapng package suite")
 }

@@ -7,13 +7,15 @@
 package csharg
 
 import (
+	"slices"
 	"sync"
 
-	"github.com/siemens/csharg/api"
+	"github.com/siemens/csharg/v2/api"
 )
 
 // TargetCache caches and indexes a set of capture targets. It can safely be
-// accessed simultaneously by multiple go routines.
+// accessed simultaneously by multiple go routines. It only hands out copies of
+// the cached capture targets, so callers cannot change the cached data.
 type TargetCache struct {
 	// The list of capture target descriptions
 	ts api.Targets
@@ -42,25 +44,25 @@ func (tc *TargetCache) IsEmpty() bool {
 	return len(tc.ts) == 0
 }
 
-// Targets returns the list of capture target descriptions.
+// Targets returns a copy of the list of capture target descriptions.
 func (tc *TargetCache) Targets() api.Targets {
 	tc.m.Lock()
 	defer tc.m.Unlock()
-	return tc.ts
+	return cloneTargets(tc.ts)
 }
 
 // Pod returns the pod capture target with the specified prefix and name. For
 // other types of targets the lookup will fail and return (nil, false). Use
 // OnNode() instead when looking up capture targets that may occur multiple
 // times inside a cluster on different cluster nodes.
-func (tc *TargetCache) Pod(name string) (*api.Target, bool) {
+func (tc *TargetCache) Pod(prefix, name string) (*api.Target, bool) {
 	tc.m.Lock()
 	defer tc.m.Unlock()
-	if ts, ok := tc.index[targetkey{name: name}]; ok {
+	if ts, ok := tc.index[targetkey{prefix: prefix, name: name}]; ok {
 		// Only return a match if there is exactly one pod capture target;
 		// otherwise, there is no match.
 		if len(ts) == 1 && ts[0].Type == "pod" {
-			return ts[0], true
+			return cloneTarget(ts[0]), true
 		}
 	}
 	return nil, false
@@ -77,16 +79,17 @@ func (tc *TargetCache) OnNode(nodename, prefix, name string) (*api.Target, bool)
 		// Only return a match if there is exactly one capture target;
 		// otherwise, there is no match.
 		if len(ts) == 1 {
-			return ts[0], true
+			return cloneTarget(ts[0]), true
 		}
 	}
 	return nil, false
 }
 
-// Set the target descriptions to be cached.
+// Set (a copy of) the target descriptions to be cached.
 func (tc *TargetCache) Set(ts api.Targets) {
 	tc.m.Lock()
 	defer tc.m.Unlock()
+	ts = cloneTargets(ts)
 	tc.ts = ts
 	// Also build an index of capture targets...
 	tc.index = make(map[targetkey]api.Targets)
@@ -104,12 +107,11 @@ func (tc *TargetCache) Set(ts api.Targets) {
 		if t.Type != "pod" {
 			cap = 10
 		}
-		if ttt, ok := tc.index[k]; ok {
-			tc.index[k] = append(ttt, t)
-		} else {
-			tc.index[k] = make(api.Targets, cap)
-			tc.index[k][0] = t
+		ttt, ok := tc.index[k]
+		if !ok {
+			ttt = make(api.Targets, 0, cap)
 		}
+		tc.index[k] = append(ttt, t)
 		// And now index the capture target by its nodename+prefix+name. This
 		// combination can appear only once.
 		k.nodename = t.NodeName
@@ -117,10 +119,36 @@ func (tc *TargetCache) Set(ts api.Targets) {
 	}
 }
 
-// Clear the cached capture target descriptions.
+// Clear the cached capture target descriptions as well as their index, so that
+// lookups fail until the next Set.
 func (tc *TargetCache) Clear() {
-	// We're lazy and just empty the list of targets.
 	tc.m.Lock()
 	defer tc.m.Unlock()
 	tc.ts = api.Targets{}
+	tc.index = nil
+}
+
+func cloneTargets(ts api.Targets) api.Targets {
+	if ts == nil {
+		return nil
+	}
+	clones := make(api.Targets, len(ts))
+	for idx, t := range ts {
+		clones[idx] = cloneTarget(t)
+	}
+	return clones
+}
+
+// cloneTarget must deep-copy all reference-typed fields of api.Target.
+func cloneTarget(t *api.Target) *api.Target {
+	if t == nil {
+		return nil
+	}
+	clone := *t
+	clone.NetworkInterfaces = slices.Clone(t.NetworkInterfaces)
+	if t.Cluster != nil {
+		cluster := *t.Cluster
+		clone.Cluster = &cluster
+	}
+	return &clone
 }
