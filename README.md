@@ -1,5 +1,5 @@
 <img align="right" width="100" height="100" src="images/csharg-icon-100x100.png" style="padding: 0 0 1ex 0.8em">
-![Coverage](https://img.shields.io/badge/Coverage-80.9%25-brightgreen)
+![Coverage](https://img.shields.io/badge/Coverage-90.6%25-brightgreen)
 
 [![Siemens](https://img.shields.io/badge/github-siemens-009999?logo=github)](https://github.com/siemens)
 [![Industrial Edge](https://img.shields.io/badge/github-industrial%20edge-e39537?logo=github)](https://github.com/industrial-edge)

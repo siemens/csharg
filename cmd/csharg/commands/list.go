@@ -120,10 +120,10 @@ func filteredlist(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	// ...throwing in sorting, if not explicitly forbidden. It depends on the
-	// object printer if it will honor the sorted data or will just impose its
-	// own order anyway.
-	if sortby, err := cmd.LocalFlags().GetString("sort-by"); err == nil && sortby != "" {
+	// ...throwing in sorting, if not explicitly forbidden. Only for custom
+	// columns, as klo's sorting printer passes on []reflect.Value items.
+	_, isCustomColumns := prn.(*klo.CustomColumnsPrinter)
+	if sortby, err := cmd.LocalFlags().GetString("sort-by"); err == nil && sortby != "" && isCustomColumns {
 		var err error
 		prn, err = klo.NewSortingPrinter(sortby, prn)
 		if err != nil {

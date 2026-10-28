@@ -16,6 +16,9 @@ const modulePath = "github.com/siemens/csharg/v2"
 // information.
 var SemVersion string
 
+// readBuildInfo is replaceable so tests can supply fake build information.
+var readBuildInfo = debug.ReadBuildInfo
+
 func init() {
 	if SemVersion == "" {
 		SemVersion = buildInfoVersion()
@@ -26,7 +29,7 @@ func init() {
 // information, regardless of csharg being the main module or a dependency.
 func buildInfoVersion() string {
 	const devel = "(devel)"
-	bi, ok := debug.ReadBuildInfo()
+	bi, ok := readBuildInfo()
 	if !ok {
 		return devel
 	}
