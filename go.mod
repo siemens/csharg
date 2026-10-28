@@ -1,3 +1,4 @@
+// Deprecated: use github.com/siemens/csharg/v2 instead.
 module github.com/siemens/csharg
 
 go 1.20
