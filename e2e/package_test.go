@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/thediveo/morbyd"
-	"github.com/thediveo/morbyd/run"
-	"github.com/thediveo/morbyd/session"
+	"github.com/thediveo/morbyd/v2"
+	"github.com/thediveo/morbyd/v2/run"
+	"github.com/thediveo/morbyd/v2/session"
 
 	"github.com/siemens/csharg/v2"
 	"github.com/siemens/csharg/v2/api"
