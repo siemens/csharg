@@ -11,7 +11,6 @@ require (
 	github.com/thediveo/clippy v0.2.3
 	github.com/thediveo/go-plugger/v3 v3.2.2
 	github.com/thediveo/klo v1.1.2
-	github.com/thediveo/lxkns v0.48.0
 	github.com/thediveo/morbyd v0.22.0
 	github.com/thediveo/nonstd v0.22.0
 	github.com/thediveo/safe v0.9.1
@@ -36,6 +35,7 @@ require (
 	github.com/containerd/ttrpc v1.2.8 // indirect
 	github.com/containerd/typeurl/v2 v2.3.0 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
+	github.com/docker/cli v29.6.1+incompatible // indirect
 	github.com/docker/docker v28.5.2+incompatible // indirect
 	github.com/docker/go-connections v0.7.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
@@ -73,6 +73,7 @@ require (
 	github.com/secure-systems-lab/go-securesystemslib v0.11.0 // indirect
 	github.com/shibumi/go-pathspec v1.3.0 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
+	github.com/thediveo/fdooze v0.3.4 // indirect
 	github.com/tonistiigi/fsutil v0.0.0-20260609091201-0257b3308df4 // indirect
 	github.com/tonistiigi/go-csvvalue v0.0.0-20240814133006-030d3b2625d0 // indirect
 	github.com/tonistiigi/units v0.0.0-20180711220420-6950e57a87ea // indirect

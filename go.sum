@@ -211,8 +211,6 @@ github.com/thediveo/go-plugger/v3 v3.2.2 h1:q5Y2dq67mi4UI0i7O7/Ub/sFHyzzvGux2/cT
 github.com/thediveo/go-plugger/v3 v3.2.2/go.mod h1:egbJVThoWjPZMyExuI3gIplOh7PrK8UU2RQaKP7cWMM=
 github.com/thediveo/klo v1.1.2 h1:vRpEgT2eM8rqKOp8/e6Udj+qmOVApoTEmR9n6tQ/1cA=
 github.com/thediveo/klo v1.1.2/go.mod h1:VAeRxMhzg3z3upvETrbrE8HlhdphLJIOHo93fTB65HU=
-github.com/thediveo/lxkns v0.48.0 h1:jAK4Mnb+PaK/fmt2zGuXm8ouxSldqYDIJFmPt7eTNwg=
-github.com/thediveo/lxkns v0.48.0/go.mod h1:J84OLYgiws6d1/Sg6EbL6lgpENjim3z4B8hzJc4iF5Q=
 github.com/thediveo/morbyd v0.22.0 h1:VARKbgZk7QJH9ZWbXzowm4aclQC22NsbsfHCXP4IOy0=
 github.com/thediveo/morbyd v0.22.0/go.mod h1:TWuHc0KBl0g8Y9vlMPOfzcL1gSa/j9tEJ/wpniq1fGI=
 github.com/thediveo/nonstd v0.22.0 h1:GvfK6u8KfFNO2v4kJhMOpDDQyGFOPJaYBf9+/JJrazg=

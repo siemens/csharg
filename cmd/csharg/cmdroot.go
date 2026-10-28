@@ -12,10 +12,10 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/thediveo/clippy"
 	_ "github.com/thediveo/clippy/debug"
-	_ "github.com/thediveo/lxkns/cmd/cli/silent"
 
 	_ "github.com/siemens/csharg/v2/cmd/cli/client"
 	_ "github.com/siemens/csharg/v2/cmd/cli/host"
+	_ "github.com/siemens/csharg/v2/cmd/cli/silent"
 	_ "github.com/siemens/csharg/v2/cmd/csharg/commands"
 	_ "github.com/siemens/csharg/v2/cmd/csharg/commands/capture"
 )
