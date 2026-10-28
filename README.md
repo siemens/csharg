@@ -1,5 +1,4 @@
 <img align="right" width="100" height="100" src="images/csharg-icon-100x100.png" style="padding: 0 0 1ex 0.8em">
-![Coverage](https://img.shields.io/badge/Coverage-90.6%25-brightgreen)
 
 [![Siemens](https://img.shields.io/badge/github-siemens-009999?logo=github)](https://github.com/siemens)
 [![Industrial Edge](https://img.shields.io/badge/github-industrial%20edge-e39537?logo=github)](https://github.com/industrial-edge)
@@ -10,6 +9,7 @@
 [![PkgGoDev](https://pkg.go.dev/badge/github.com/siemens/csharg/v2)](https://pkg.go.dev/github.com/siemens/csharg/v2)
 [![GitHub](https://img.shields.io/github/license/siemens/csharg)](https://img.shields.io/github/license/siemens/csharg)
 ![build and test](https://github.com/siemens/csharg/workflows/build%20and%20test/badge.svg?branch=main)
+![Coverage](https://img.shields.io/badge/Coverage-90.6%25-brightgreen)
 
 `csharg/v2` is a Golang module for easy CLI access to the
 [Packetflix](https://github.com/siemens/packetflix) capture service deployed to
@@ -48,7 +48,61 @@ repositories:
   integrating the `csharg` module without having to care about details of the
   Packetflix capture service API.
 
-![Overview](images/csharg.drawio.svg)
+```mermaid
+flowchart TB
+    subgraph extcap-usage["Wireshark extcap plugin"]
+        direction BT
+        ws1["Wireshark"]
+        extcap["csharg-extcap<br/>csharg (go mod)"]
+        extcap -->|named pipe| ws1
+    end
+
+    subgraph cli-usage["$ csharg capture ... | wireshark -k -i -"]
+        direction BT
+        ws2["Wireshark"]
+        cli["csharg CLI<br/>csharg (go mod)"]
+        cli -->|pipe| ws2
+    end
+
+    subgraph file-usage["$ csharg capture ... #gt; capture.pcapng"]
+        direction BT
+        pcapng["capture.pcapng"]
+        app["application (go)<br/>csharg (go mod)"]
+        app -->|write| pcapng
+    end
+
+    extcap-usage --> net(["network<br/>HTTP + WS or HTTPS + WSS"])
+    cli-usage --> net
+    file-usage --> net
+
+    subgraph host["Container Host"]
+        direction TB
+        pf1["Packetflix :5001"] --> gw1["G(h)ostwire"]
+    end
+
+    subgraph ied["Siemens Industrial Edge"]
+        direction TB
+        subgraph edgeshark["Edgeshark App"]
+            direction TB
+            pf2["Packetflix :5001"] --> gw2["G(h)ostwire"]
+        end
+    end
+
+    net -->|"$ csharg --host http://foo:5001 capture ...<br/>csharg.NewSharkTankOnHost(...)"| host
+    net -->|"$ csharg --host http://foo:5001 capture ...<br/>csharg.NewSharkTankOnHost(...)"| ied
+
+    classDef wireshark fill:#203fdb,color:#fff,stroke:none
+    classDef extcap fill:#005454,color:#fff,stroke:none
+    classDef cli fill:#78003C,color:#fff,stroke:none
+    classDef gomod fill:#5C7299,color:#fff,stroke:none
+    classDef file fill:#fff,stroke:#000
+    class ws1,ws2 wireshark
+    class extcap extcap
+    class cli cli
+    class app gomod
+    class pcapng file
+    style edgeshark fill:#ABE0D6
+```
 
 key:
 - `$ csharg ...` denotes a CLI command.
