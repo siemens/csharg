@@ -36,6 +36,15 @@ type SharkTankOnHostOptions struct {
 // maxDiscoveryResponseSize limits the size of target discovery responses.
 const maxDiscoveryResponseSize = 16 << 20
 
+// StatusError reports an unexpected HTTP response status from the capture
+// service, such as 401 Unauthorized; use [errors.As] to retrieve it.
+type StatusError struct {
+	StatusCode int
+	Status     string
+}
+
+func (e *StatusError) Error() string { return e.Status }
+
 // NewSharkTankOnHost returns a new host capturer object to capture directly
 // from host targets using a Packetflix service, and accessing it via host, an
 // optional port, and an optional service path.
@@ -197,6 +206,10 @@ func (hc *hostsharktank) Capture(w io.Writer, t *api.Target, opts *CaptureOption
 	}
 	wscon, resp, err := wsd.Dial(apiurl.String(), *wsheaders)
 	if err != nil {
+		if errors.Is(err, websocket.ErrBadHandshake) && resp != nil {
+			err = fmt.Errorf("%w: %w", err,
+				&StatusError{StatusCode: resp.StatusCode, Status: resp.Status})
+		}
 		slog.Error("cannot contact capture service via websocket", xslog.Error(err))
 		return
 	}
@@ -258,7 +271,8 @@ func (hc *hostsharktank) discover() (api.Targets, error) {
 	}
 	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("querying targets from GhostWire-on-Packetflix service failed: %s", res.Status)
+		return nil, fmt.Errorf("querying targets from GhostWire-on-Packetflix service failed: %w",
+			&StatusError{StatusCode: res.StatusCode, Status: res.Status})
 	}
 	var td api.GwTargetList
 	body := &io.LimitedReader{R: res.Body, N: maxDiscoveryResponseSize + 1}

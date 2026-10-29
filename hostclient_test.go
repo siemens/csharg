@@ -6,6 +6,7 @@ package csharg
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -99,8 +100,30 @@ var _ = Describe("host client", func() {
 		Expect(err).NotTo(HaveOccurred())
 		ts, err := st.Targets()
 		Expect(err).To(MatchError(ContainSubstring("401 Unauthorized")))
+		var serr *StatusError
+		Expect(errors.As(err, &serr)).To(BeTrue())
+		Expect(serr.StatusCode).To(Equal(http.StatusUnauthorized))
 		Expect(ts).To(BeEmpty())
 		Expect(st.(*hostsharktank).cache.IsEmpty()).To(BeTrue())
+	})
+
+	It("reports the status of rejected capture handshakes", func() {
+		srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+			rw.WriteHeader(http.StatusUnauthorized)
+		}))
+		DeferCleanup(srv.Close)
+
+		st, err := NewSharkTankOnHost(srv.URL, nil)
+		Expect(err).NotTo(HaveOccurred())
+		_, err = st.Capture(io.Discard, &api.Target{
+			Name:              "foo",
+			NetworkInterfaces: []string{"eth0"},
+		}, nil)
+		Expect(err).To(MatchError(ContainSubstring("401 Unauthorized")))
+		Expect(err).To(MatchError(websocket.ErrBadHandshake))
+		var serr *StatusError
+		Expect(errors.As(err, &serr)).To(BeTrue())
+		Expect(serr.StatusCode).To(Equal(http.StatusUnauthorized))
 	})
 
 	It("rejects oversized discovery responses", func() {

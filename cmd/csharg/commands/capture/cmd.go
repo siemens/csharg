@@ -153,7 +153,7 @@ func capture(cmd *cobra.Command, targetname string, targettypes []string, nodena
 	target := matches[0]
 	capture, err := st.Capture(out, target, captureopts)
 	if err != nil {
-		return fmt.Errorf("cannot start capture: %s", err.Error())
+		return fmt.Errorf("cannot start capture: %w", err)
 	}
 	sigs := make(chan os.Signal, 2)
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)

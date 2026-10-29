@@ -17,17 +17,18 @@ container hosts, such as [Edgeshark](https://github.com/siemens/edgeshark) on
 [Siemens Industrial Edge](https://github.com/industrial-edge) and also
 standalone Docker hosts.
 
+## Edgeshark Project
+
 `csharg/v2` is part of the "Edgeshark" project that consist of several
 repositories:
-- [Edgeshark Hub repository](https://github.com/siemens/edgeshark)
-- [G(h)ostwire discovery service](https://github.com/siemens/ghostwire)
+- [Edgeshark Hub repository](https://github.com/siemens/edgeshark) with Edgeshark Industrial Edge App.
+- [Ghostwire discovery service](https://github.com/siemens/ghostwire)
 - [Packetflix packet streaming service](https://github.com/siemens/packetflix)
 - [Containershark Extcap plugin for
   Wireshark](https://github.com/siemens/cshargextcap)
-- support modules:
-  - 🖝 **csharg (CLI)** 🖜
-  - [mobydig](https://github.com/siemens/mobydig)
-  - [ieddata](https://github.com/siemens/ieddata)
+- **csharg (CLI)**
+- [mobydig](https://github.com/siemens/mobydig)
+- [ieddata](https://github.com/siemens/ieddata)
 
 ## Usage
 
