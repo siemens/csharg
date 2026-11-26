@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/thediveo/safe"
 
 	"github.com/siemens/csharg/v2/api"
 
@@ -129,6 +130,56 @@ var _ = Describe("host client", func() {
 		Expect(errors.As(err, &serr)).To(BeTrue())
 		Expect(serr.StatusCode).To(Equal(http.StatusUnauthorized))
 	})
+
+	It("doesn't log rejected capture handshakes as errors", func() {
+		// Matching the plain text output is sufficient, as only the level of a
+		// single fixed message matters. It's also stable: the stdlib text
+		// handler always writes the level and message as the "level=..."
+		// and "msg=..." keys directly following "time=...", with the level in
+		// its canonical upper case form, such as "DEBUG" and "ERROR".
+		var logs safe.Buffer
+		DeferCleanup(slog.SetDefault, slog.Default())
+		slog.SetDefault(slog.New(slog.NewTextHandler(&logs,
+			&slog.HandlerOptions{Level: slog.LevelDebug})))
+		srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+			rw.WriteHeader(http.StatusUnauthorized)
+		}))
+		DeferCleanup(srv.Close)
+
+		st := Successful(NewSharkTankOnHost(srv.URL, nil))
+		_, err := st.Capture(io.Discard, &api.Target{
+			Name:              "foo",
+			NetworkInterfaces: []string{"eth0"},
+		}, nil)
+		var serr *StatusError
+		Expect(errors.As(err, &serr)).To(BeTrue())
+		Expect(serr.StatusCode).To(Equal(http.StatusUnauthorized))
+
+		Expect(logs.String()).To(SatisfyAll(
+			ContainSubstring(`level=DEBUG msg="cannot contact capture service via websocket"`),
+			Not(ContainSubstring("level=ERROR"))))
+	})
+
+	// discoverTargets explicitly discovers the capture targets of st.
+	discoverTargets := func(st SharkTank) error {
+		_, err := st.Targets()
+		return err
+	}
+	// captureDiscovered captures from a target lacking network interfaces, so
+	// that st needs to discover the capture targets first.
+	captureDiscovered := func(st SharkTank) error {
+		_, err := st.Capture(io.Discard, &api.Target{Name: "foo"}, nil)
+		return err
+	}
+	// captureHandshake captures from a target with network interfaces, so that
+	// st immediately attempts the capture WebSocket handshake; any log output
+	// goes to the GinkgoWriter.
+	captureHandshake := func(st SharkTank) error {
+		DeferCleanup(slog.SetDefault, slog.Default())
+		slog.SetDefault(slog.New(slog.NewTextHandler(GinkgoWriter, nil)))
+		_, err := st.Capture(io.Discard, &api.Target{Name: "foo", NetworkInterfaces: []string{"eth0"}}, nil)
+		return err
+	}
 
 	DescribeTable("reports rejections together with their response headers",
 		func(op func(SharkTank) error, wwwauth string) {

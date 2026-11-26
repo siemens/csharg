@@ -250,7 +250,9 @@ func (hc *hostsharktank) Capture(w io.Writer, t *api.Target, opts *CaptureOption
 			err = fmt.Errorf("%w: %w", err,
 				&StatusError{StatusCode: resp.StatusCode, Status: resp.Status, Header: resp.Header})
 		}
-		slog.Error("cannot contact capture service via websocket", xslog.Error(err))
+		// Callers report the returned error themselves and might recover from
+		// it, such as by logging in and retrying after a 401 rejection.
+		slog.Debug("cannot contact capture service via websocket", xslog.Error(err))
 		return
 	}
 	// Don't log any header values, as they might carry credentials.
