@@ -9,7 +9,7 @@
 [![PkgGoDev](https://pkg.go.dev/badge/github.com/siemens/csharg/v2)](https://pkg.go.dev/github.com/siemens/csharg/v2)
 [![GitHub](https://img.shields.io/github/license/siemens/csharg)](https://img.shields.io/github/license/siemens/csharg)
 ![build and test](https://github.com/siemens/csharg/workflows/build%20and%20test/badge.svg?branch=main)
-![Coverage](https://img.shields.io/badge/Coverage-90.6%25-brightgreen)
+![Coverage](https://img.shields.io/badge/Coverage-91.7%25-brightgreen)
 
 `csharg/v2` is a Golang module for easy CLI access to the
 [Packetflix](https://github.com/siemens/packetflix) capture service deployed to

@@ -37,8 +37,8 @@ func TestE2E(t *testing.T) {
 }
 
 const (
-	ghostwireImage  = "ghcr.io/siemens/ghostwire:latest"
-	packetflixImage = "ghcr.io/siemens/packetflix:latest"
+	ghostwireImage  = "ghcr.io/siemens/ghostwire:stable"
+	packetflixImage = "ghcr.io/siemens/packetflix:stable"
 	targetImage     = "busybox:latest"
 
 	// csharg derives the node name of standalone host targets from the service URL.
@@ -80,7 +80,6 @@ var _ = BeforeSuite(func(ctx context.Context) {
 		run.WithCommand("--http=[::]:5000"),
 		run.WithNetwork("name="+netw.ID+",alias=gostwire"),
 		run.WithCgroupnsMode("host"),
-		run.WithCapAdd("DAC_READ_SEARCH"),
 		run.WithCapAdd("DAC_OVERRIDE"),
 	)...)).Error().NotTo(HaveOccurred())
 	packetflix := Successful(sess.Run(ctx, packetflixImage, serviceOpts(
@@ -109,6 +108,7 @@ func serviceOpts(opts ...run.Opt) []run.Opt {
 		run.WithCapAdd("SYS_ADMIN"),
 		run.WithCapAdd("SYS_CHROOT"),
 		run.WithCapAdd("SYS_PTRACE"),
+		run.WithCapAdd("DAC_READ_SEARCH"),
 		run.WithCapAdd("NET_ADMIN"),
 		run.WithCapAdd("NET_RAW"),
 	}, opts...)

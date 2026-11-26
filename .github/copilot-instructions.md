@@ -30,6 +30,10 @@ golangci-lint fmt <path/to/file.go>
 
 Do not use plain `gofmt` as `golangci-lint fmt` enforces import grouping (`gci`) and other repository formatting rules.
 
+## Git Commits
+
+Never add any agent-related attribution to commit messages, pull request descriptions, or any other git metadata. This includes trailer lines such as `Co-authored-by:`, `Generated-by:`, or `Assisted-by:` naming an agent, tool, or AI, as well as attribution text such as "Generated with …" or "Co-authored by Copilot".
+
 ## Test Framework
 
 Unit tests must be written using Ginkgo v2 (`github.com/onsi/ginkgo/v2`) and Gomega (`github.com/onsi/gomega`), not the plain `testing` package style.
@@ -71,6 +75,17 @@ In tests, prefer slice and collection helpers from `github.com/thediveo/nonstd` 
 Never add test code to explicitly remove or kill stale containers, as container cleanup is automatically handled by `morbyd`'s `session.WithAutoCleaning(...)`.
 
 For temporary directories in Ginkgo specs, do not use `GinkgoT().TempDir()`; instead use the plain stdlib together with `DeferCleanup`, for example `tmpdir := Successful(os.MkdirTemp("", "mobydav-test-"))` followed by `DeferCleanup(os.RemoveAll, tmpdir)`.
+
+Specs that produce `slog` output must capture it in the `GinkgoWriter`, so that it only shows in verbose runs or for failed specs. Do this only in the specs (or the operations they call) that actually log, not suite-wide or in specs that don't log. Inline the setup and teardown directly at these call sites instead of wrapping them in a helper:
+
+```go
+DeferCleanup(slog.SetDefault, slog.Default())
+slog.SetDefault(slog.New(slog.NewTextHandler(GinkgoWriter, nil)))
+```
+
+Don't introduce helper functions for trivial setups of just a line or two; inline them at the call sites instead.
+
+In tests, name variables holding channels with a `Ch` suffix (or `ch` when the name would otherwise be just the channel), for example `discoveredCh` and `capturedCh` instead of `discovered` and `captured`.
 
 ## End-to-End Tests
 

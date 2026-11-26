@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/url"
 	"path"
@@ -37,10 +38,16 @@ type SharkTankOnHostOptions struct {
 const maxDiscoveryResponseSize = 16 << 20
 
 // StatusError reports an unexpected HTTP response status from the capture
-// service, such as 401 Unauthorized; use [errors.As] to retrieve it.
+// service, such as 401 Unauthorized; use [errors.As] to retrieve it. This
+// applies to failed target discoveries as well as to rejected capture WebSocket
+// handshakes.
 type StatusError struct {
 	StatusCode int
 	Status     string
+	// Header contains the HTTP response headers, allowing callers to further
+	// tell apart the kind of service or proxy that rejected a request, such as
+	// by the presence or absence of a "WWW-Authenticate" header.
+	Header http.Header
 }
 
 func (e *StatusError) Error() string { return e.Status }
@@ -72,8 +79,28 @@ func NewSharkTankOnHost(hosturl string, opts *SharkTankOnHostOptions) (st SharkT
 	}
 	if opts != nil {
 		uc.opts = *opts
+		if uc.opts.Header, err = requestHeader(opts.Header); err != nil {
+			return nil, err
+		}
 	}
 	return uc, nil
+}
+
+// requestHeader returns a copy of the additional request headers h with
+// canonicalized keys, rejecting headers managed by the WebSocket handshake.
+func requestHeader(h http.Header) (http.Header, error) {
+	if h == nil {
+		return nil, nil
+	}
+	clone := make(http.Header, len(h))
+	for key, values := range h {
+		ckey := http.CanonicalHeaderKey(key)
+		if ckey == "Upgrade" || ckey == "Connection" || strings.HasPrefix(ckey, "Sec-Websocket-") {
+			return nil, fmt.Errorf("request header %q is reserved for the WebSocket handshake", ckey)
+		}
+		clone[ckey] = append(clone[ckey], values...)
+	}
+	return clone, nil
 }
 
 // hostsharktank implements the UrlCapturer interface for a standalone host,
@@ -171,11 +198,24 @@ func (hc *hostsharktank) Capture(w io.Writer, t *api.Target, opts *CaptureOption
 	}
 	// Prepare the necessary URL query parameters and request headers in order
 	// to suckcessfully start a capture...
-	wsheaders, err := CaptureServiceHeaders(t, opts)
+	svcheaders, err := CaptureServiceHeaders(t, opts)
 	if err != nil {
 		slog.Error("service request header failure", xslog.Error(err))
 		return
 	}
+	// Start with the caller's additional headers, but csharg owns the
+	// Clustershark-* headers as well as the Authorization header when using a
+	// bearer token.
+	wsheaders := hc.opts.Header.Clone()
+	if wsheaders == nil {
+		wsheaders = http.Header{}
+	}
+	for key := range wsheaders {
+		if strings.HasPrefix(key, "Clustershark-") {
+			delete(wsheaders, key)
+		}
+	}
+	maps.Copy(wsheaders, *svcheaders)
 	if hc.opts.BearerToken != "" {
 		wsheaders.Set("Authorization", "Bearer "+hc.opts.BearerToken)
 	}
@@ -204,17 +244,19 @@ func (hc *hostsharktank) Capture(w io.Writer, t *api.Target, opts *CaptureOption
 	if hc.opts.InsecureSkipVerify && apiurl.Scheme == "wss" {
 		wsd.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
-	wscon, resp, err := wsd.Dial(apiurl.String(), *wsheaders)
+	wscon, resp, err := wsd.Dial(apiurl.String(), wsheaders)
 	if err != nil {
 		if errors.Is(err, websocket.ErrBadHandshake) && resp != nil {
 			err = fmt.Errorf("%w: %w", err,
-				&StatusError{StatusCode: resp.StatusCode, Status: resp.Status})
+				&StatusError{StatusCode: resp.StatusCode, Status: resp.Status, Header: resp.Header})
 		}
 		slog.Error("cannot contact capture service via websocket", xslog.Error(err))
 		return
 	}
+	// Don't log any header values, as they might carry credentials.
 	slog.Debug("capture service initial HTTP response",
-		xslog.Lazy("response", func() string { return fmt.Sprint(*resp) }))
+		slog.String("status", resp.Status),
+		slog.String("proto", resp.Proto))
 	return StartCaptureStream(w, wscon, t, opts)
 }
 
@@ -262,6 +304,9 @@ func (hc *hostsharktank) discover() (api.Targets, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cannot create target discovery request: %w", err)
 	}
+	if hc.opts.Header != nil {
+		req.Header = hc.opts.Header.Clone()
+	}
 	if hc.opts.BearerToken != "" {
 		req.Header.Set("Authorization", "Bearer "+hc.opts.BearerToken)
 	}
@@ -272,7 +317,7 @@ func (hc *hostsharktank) discover() (api.Targets, error) {
 	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("querying targets from GhostWire-on-Packetflix service failed: %w",
-			&StatusError{StatusCode: res.StatusCode, Status: res.Status})
+			&StatusError{StatusCode: res.StatusCode, Status: res.Status, Header: res.Header})
 	}
 	var td api.GwTargetList
 	body := &io.LimitedReader{R: res.Body, N: maxDiscoveryResponseSize + 1}

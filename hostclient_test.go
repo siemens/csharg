@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -21,6 +22,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	. "github.com/thediveo/success"
 )
 
 var _ = Describe("host client", func() {
@@ -108,6 +110,8 @@ var _ = Describe("host client", func() {
 	})
 
 	It("reports the status of rejected capture handshakes", func() {
+		DeferCleanup(slog.SetDefault, slog.Default())
+		slog.SetDefault(slog.New(slog.NewTextHandler(GinkgoWriter, nil)))
 		srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 			rw.WriteHeader(http.StatusUnauthorized)
 		}))
@@ -124,6 +128,139 @@ var _ = Describe("host client", func() {
 		var serr *StatusError
 		Expect(errors.As(err, &serr)).To(BeTrue())
 		Expect(serr.StatusCode).To(Equal(http.StatusUnauthorized))
+	})
+
+	DescribeTable("reports rejections together with their response headers",
+		func(op func(SharkTank) error, wwwauth string) {
+			srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+				rw.Header().Set("X-Rejected-By", "test")
+				if wwwauth != "" {
+					rw.Header().Set("WWW-Authenticate", wwwauth)
+				}
+				rw.WriteHeader(http.StatusUnauthorized)
+			}))
+			DeferCleanup(srv.Close)
+
+			err := op(Successful(NewSharkTankOnHost(srv.URL, nil)))
+			var serr *StatusError
+			Expect(errors.As(err, &serr)).To(BeTrue())
+			Expect(serr.StatusCode).To(Equal(http.StatusUnauthorized))
+			Expect(serr.Header).To(HaveKeyWithValue("X-Rejected-By", []string{"test"}))
+			if wwwauth == "" {
+				Expect(serr.Header).NotTo(HaveKey("Www-Authenticate"))
+			} else {
+				Expect(serr.Header).To(HaveKeyWithValue("Www-Authenticate", []string{wwwauth}))
+			}
+		},
+		Entry("discovery without WWW-Authenticate", discoverTargets, ""),
+		Entry("discovery with WWW-Authenticate", discoverTargets, `Bearer realm="test"`),
+		Entry("capture discovery without WWW-Authenticate", captureDiscovered, ""),
+		Entry("capture discovery with WWW-Authenticate", captureDiscovered, `Bearer realm="test"`),
+		Entry("handshake without WWW-Authenticate", captureHandshake, ""),
+		Entry("handshake with WWW-Authenticate", captureHandshake, `Bearer realm="test"`),
+	)
+
+	When("sending additional request headers", func() {
+
+		// newHeaderServer returns a capture service URL, as well as channels
+		// receiving the request headers of discoveries and capture handshakes.
+		newHeaderServer := func() (string, chan http.Header, chan http.Header) {
+			discoveredCh := make(chan http.Header, 1)
+			capturedCh := make(chan http.Header, 1)
+			upgrader := websocket.Upgrader{}
+			mux := http.NewServeMux()
+			mux.HandleFunc("/discover/mobyshark", func(rw http.ResponseWriter, r *http.Request) {
+				discoveredCh <- r.Header.Clone()
+				_, _ = io.WriteString(rw,
+					`{"containers":[{"name":"foo","type":"docker","network-interfaces":["eth0","lo"]}]}`)
+			})
+			mux.HandleFunc("/capture", func(rw http.ResponseWriter, r *http.Request) {
+				capturedCh <- r.Header.Clone()
+				conn, err := upgrader.Upgrade(rw, r, nil)
+				if err != nil {
+					return
+				}
+				defer func() { _ = conn.Close() }()
+				_ = conn.WriteMessage(websocket.CloseMessage,
+					websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+				drain(conn)
+			})
+			srv := httptest.NewServer(mux)
+			DeferCleanup(srv.Close)
+			return srv.URL, discoveredCh, capturedCh
+		}
+
+		It("sends them with discoveries and capture handshakes", func(ctx context.Context) {
+			url, discoveredCh, capturedCh := newHeaderServer()
+			st := Successful(NewSharkTankOnHost(url, &SharkTankOnHostOptions{
+				CommonClientOptions: CommonClientOptions{
+					Header: http.Header{"Cookie": {"authToken=x"}},
+				},
+			}))
+			cs := Successful(st.Capture(io.Discard, &api.Target{Name: "foo", NodeName: "127.0.0.1"}, nil))
+			DeferCleanup(cs.Stop)
+
+			Eventually(ctx, discoveredCh).Should(Receive(HaveKeyWithValue("Cookie", []string{"authToken=x"})))
+			Eventually(ctx, capturedCh).Should(Receive(HaveKeyWithValue("Cookie", []string{"authToken=x"})))
+		}, SpecTimeout(10*time.Second))
+
+		It("doesn't let them override the bearer token and capture service headers", func(ctx context.Context) {
+			url, discoveredCh, capturedCh := newHeaderServer()
+			st := Successful(NewSharkTankOnHost(url, &SharkTankOnHostOptions{
+				CommonClientOptions: CommonClientOptions{
+					BearerToken: "good",
+					Header: http.Header{
+						"Authorization":       {"Bearer evil"},
+						"clustershark-nif":    {"evil"},
+						"Clustershark-Filter": {"evil"},
+					},
+				},
+			}))
+			cs := Successful(st.Capture(io.Discard, &api.Target{Name: "foo", NodeName: "127.0.0.1"}, nil))
+			DeferCleanup(cs.Stop)
+
+			Eventually(ctx, discoveredCh).Should(Receive(
+				HaveKeyWithValue("Authorization", []string{"Bearer good"})))
+			Eventually(ctx, capturedCh).Should(Receive(SatisfyAll(
+				HaveKeyWithValue("Authorization", []string{"Bearer good"}),
+				HaveKeyWithValue("Clustershark-Nif", []string{"eth0/lo"}),
+				Not(HaveKey("Clustershark-Filter")),
+			)))
+		}, SpecTimeout(10*time.Second))
+
+		It("isn't affected by later changes to the caller's headers", func(ctx context.Context) {
+			url, discoveredCh, capturedCh := newHeaderServer()
+			header := http.Header{"Cookie": {"authToken=x"}}
+			st := Successful(NewSharkTankOnHost(url, &SharkTankOnHostOptions{
+				CommonClientOptions: CommonClientOptions{Header: header},
+			}))
+			header["Cookie"][0] = "authToken=y"
+			header.Set("X-Foo", "bar")
+
+			cs := Successful(st.Capture(io.Discard, &api.Target{Name: "foo", NodeName: "127.0.0.1"}, nil))
+			DeferCleanup(cs.Stop)
+
+			expected := SatisfyAll(
+				HaveKeyWithValue("Cookie", []string{"authToken=x"}),
+				Not(HaveKey("X-Foo")))
+			Eventually(ctx, discoveredCh).Should(Receive(expected))
+			Eventually(ctx, capturedCh).Should(Receive(expected))
+		}, SpecTimeout(10*time.Second))
+
+		DescribeTable("rejects headers reserved for the WebSocket handshake",
+			func(key string) {
+				Expect(NewSharkTankOnHost("localhost:1", &SharkTankOnHostOptions{
+					CommonClientOptions: CommonClientOptions{
+						Header: http.Header{key: {"foo"}},
+					},
+				})).Error().To(MatchError(ContainSubstring("reserved for the WebSocket handshake")))
+			},
+			Entry(nil, "Upgrade"),
+			Entry(nil, "connection"),
+			Entry(nil, "Sec-WebSocket-Key"),
+			Entry(nil, "Sec-WebSocket-Protocol"),
+		)
+
 	})
 
 	It("rejects oversized discovery responses", func() {
